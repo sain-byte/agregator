@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Agregator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: 'var(--brand-500, #2563eb)',
+              600: 'var(--brand-600, #1d4ed8)',
+              glow: 'var(--brand-glow, rgba(37, 99, 235, 0.25))'
+            }
+          },
+          animation: {
+            'shimmer': 'shimmer 1.5s infinite'
+          },
+          keyframes: {
+            shimmer: {
+              '100%': { transform: 'translateX(100%)' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .light .glass-panel {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .page-transition {
+      transition: opacity 0.2s cubic-bezier(0.32, 0.72, 0, 1), transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .page-exit {
+      opacity: 0;
+      transform: scale(0.98) translateY(6px);
+    }
+    .page-enter {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+
+    .sidebar-transition {
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), margin-left 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    :root {
+      --brand-500: #2563eb;
+      --brand-600: #1d4ed8;
+      --brand-glow: rgba(37, 99, 235, 0.25);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 light:bg-slate-100 text-slate-100 light:text-slate-900 font-sans flex h-screen overflow-hidden transition-colors duration-300">
+
+  <button id="btn-sidebar-open" onclick="toggleSidebar()" class="fixed top-4 left-4 z-50 p-2.5 glass-panel text-white rounded-xl shadow-2xl hidden">
+    <i data-lucide="menu" class="w-5 h-5"></i>
+  </button>
+
+  <aside id="sidebar" class="w-64 glass-panel border-r flex flex-col h-full sidebar-transition z-40 relative">
+    
+    <div class="flex-1 overflow-y-auto min-h-0">
+      
+      <!-- HEADER SIDEBAR (LOGO + DARK/LIGHT TOGGLE + SETTINGS + CLOSE) -->
+      <div class="p-3.5 flex items-center justify-between border-b border-white/10 light:border-slate-200 sticky top-0 bg-slate-950/95 backdrop-blur-md z-20">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 bg-brand-500 rounded-xl flex items-center justify-center font-black text-white shadow-lg shadow-brand-glow text-xs shrink-0">
+            AG
+          </div>
+          <div>
+            <h1 class="font-extrabold text-xs tracking-wide text-white light:text-slate-900 leading-tight">Dashboard</h1>
+            <p class="text-[9px] text-slate-400 font-medium">Agregator</p>
+          </div>
+        </div>
+
+        <!-- THEME & SETTINGS & SIDEBAR CLOSE CONTROLS -->
+        <div class="flex items-center gap-1">
+          <button onclick="toggleDarkMode()" title="Ubah Mode Gelap / Terang" class="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition">
+            <i data-lucide="moon" id="theme-icon-dark" class="w-4 h-4 text-amber-400"></i>
+            <i data-lucide="sun" id="theme-icon-light" class="w-4 h-4 text-amber-500 hidden"></i>
+          </button>
+          <button onclick="openSettingsModal()" title="Pengaturan Warna Tema" class="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition">
+            <i data-lucide="settings" class="w-4 h-4 text-brand-500"></i>
+          </button>
+          <button onclick="toggleSidebar()" title="Tutup Sidebar" class="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition">
+            <i data-lucide="panel-left-close" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- MODUL LOGIN / PROFIL USER -->
+      <div class="p-3 border-b border-white/10 light:border-slate-200 bg-slate-900/40">
+        <div id="sidebar-auth-container" class="w-full">
+          <button onclick="showAuthScreen('login')" 
+                  class="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-brand-glow">
+            <i data-lucide="log-in" class="w-4 h-4"></i>
+            <span>Login Ke Akun</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SEARCH MENU -->
+      <div class="p-3 pb-1">
+        <div class="relative">
+          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+          <input type="text" id="menu-search" onkeyup="filterSidebarMenu()" placeholder="Cari menu..." 
+                 class="w-full bg-slate-900/60 light:bg-slate-100 border border-white/10 light:border-slate-300 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white light:text-slate-900 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+        </div>
+      </div>
+
+      <!-- MAIN NAV LIST -->
+      <nav class="p-3 space-y-1" id="sidebar-nav-list">
+        <button onclick="switchTab('structure')" id="nav-structure" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition text-brand-500 bg-brand-500/10 border border-brand-500/20">
+          <i data-lucide="user" class="w-4 h-4"></i>
+          <span>Profil</span>
+        </button>
+
+        <button onclick="switchTab('schedule')" id="nav-schedule" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition text-slate-400 light:text-slate-600 hover:text-white hover:bg-white/5">
+          <i data-lucide="calendar" class="w-4 h-4"></i>
+          <span>Schedule Agent</span>
+        </button>
+
+        <button onclick="switchTab('kpi')" id="nav-kpi" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition text-slate-400 light:text-slate-600 hover:text-white hover:bg-white/5">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>KPI Performance</span>
+        </button>
+      </nav>
+    </div>
+
+  </aside>
+
+  <main class="flex-1 flex flex-col h-screen overflow-hidden bg-slate-950 light:bg-slate-100">
+    <header class="h-16 border-b border-white/10 light:border-slate-200 px-6 flex items-center justify-between glass-panel z-30">
+      <h2 id="page-title" class="text-base font-extrabold text-white light:text-slate-900 tracking-wide">Profil Tim</h2>
+      
+      <div class="flex items-center gap-3">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          System Active
+        </span>
+      </div>
+    </header>
+
+    <section id="app-content" class="flex-1 overflow-y-auto p-6 page-transition page-enter">
+    </section>
+  </main>
+
+  <!-- MODAL SETTINGS -->
+  <div id="settings-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-white/10 rounded-3xl max-w-sm w-full p-6 space-y-5 shadow-2xl relative">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
+          <i data-lucide="palette" class="w-4 h-4 text-brand-500"></i>
+          Warna Aksen Dashboard
+        </h3>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <p class="text-xs text-slate-400">Pilih warna highlight favorit kamu:</p>
+        <div class="grid grid-cols-2 gap-2.5">
+          <button onclick="setAccentTheme('blue')" class="flex items-center gap-2.5 p-3 bg-slate-800 rounded-xl border border-slate-700 hover:border-blue-500 transition">
+            <span class="w-4 h-4 rounded-full bg-blue-600"></span>
+            <span class="text-xs font-semibold text-white">iOS Blue</span>
+          </button>
+          <button onclick="setAccentTheme('emerald')" class="flex items-center gap-2.5 p-3 bg-slate-800 rounded-xl border border-slate-700 hover:border-emerald-500 transition">
+            <span class="w-4 h-4 rounded-full bg-emerald-600"></span>
+            <span class="text-xs font-semibold text-white">Emerald</span>
+          </button>
+          <button onclick="setAccentTheme('purple')" class="flex items-center gap-2.5 p-3 bg-slate-800 rounded-xl border border-slate-700 hover:border-purple-500 transition">
+            <span class="w-4 h-4 rounded-full bg-purple-600"></span>
+            <span class="text-xs font-semibold text-white">Purple</span>
+          </button>
+          <button onclick="setAccentTheme('orange')" class="flex items-center gap-2.5 p-3 bg-slate-800 rounded-xl border border-slate-700 hover:border-orange-500 transition">
+            <span class="w-4 h-4 rounded-full bg-orange-600"></span>
+            <span class="text-xs font-semibold text-white">Sunset</span>
+          </button>
+        </div>
+      </div>
+
+      <button onclick="closeSettingsModal()" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-brand-glow">
+        Simpan Preferensi
+      </button>
+    </div>
+  </div>
+
+  <!-- LOGIN OVERLAY -->
+  <div id="login-overlay" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-[100] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-white/10 rounded-3xl max-w-md w-full p-8 space-y-6 shadow-2xl relative">
+      <div class="text-center space-y-2">
+        <div class="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center font-black text-white text-xl mx-auto shadow-lg shadow-brand-glow">
+          AG
+        </div>
+        <h2 id="auth-title" class="text-xl font-bold text-white tracking-wide">Login Dashboard</h2>
+        <p id="auth-subtitle" class="text-xs text-slate-400">Masukkan akun terdaftar untuk mengakses sistem</p>
+      </div>
+
+      <form id="form-login" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Username / Email</label>
+          <input type="text" id="login-username" required placeholder="Username atau email" 
+                 class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs font-semibold text-slate-300">Password</label>
+            <button type="button" onclick="showAuthScreen('forgot')" class="text-xs text-brand-500 hover:underline">Lupa Password?</button>
+          </div>
+          <input type="password" id="login-password" required placeholder="••••••••" 
+                 class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+        </div>
+
+        <div id="login-error" class="text-xs text-red-400 bg-red-500/10 border border-red-500/20 p-3 rounded-xl hidden"></div>
+
+        <button type="submit" id="btn-login-submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-3 rounded-xl text-sm transition shadow-lg shadow-brand-glow">
+          Masuk ke Dashboard
+        </button>
+      </form>
+
+      <form id="form-forgot" onsubmit="handleForgotSubmit(event)" class="space-y-4 hidden">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Email Terdaftar</label>
+          <input type="email" id="forgot-email" required placeholder="contoh@domain.com" 
+                 class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+        </div>
+        <div id="forgot-msg" class="text-xs p-3 rounded-xl hidden"></div>
+        <button type="submit" id="btn-forgot-submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-3 rounded-xl text-sm transition">
+          Kirim Kode OTP
+        </button>
+        <button type="button" onclick="showAuthScreen('login')" class="w-full text-xs text-slate-400 hover:text-white py-1">
+          ← Kembali ke Login
+        </button>
+      </form>
+
+      <form id="form-reset" onsubmit="handleResetSubmit(event)" class="space-y-4 hidden">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Kode OTP (6 Digit)</label>
+          <input type="text" id="reset-otp" required placeholder="123456" maxlength="6" 
+                 class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white tracking-widest text-center font-mono placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Password Baru</label>
+          <input type="password" id="reset-new-password" required placeholder="••••••••" 
+                 class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+        </div>
+        <div id="reset-msg" class="text-xs p-3 rounded-xl hidden"></div>
+        <button type="submit" id="btn-reset-submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-sm transition">
+          Simpan Password Baru
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/config.js?v=111111"></script>
+  <script src="js/auth.js?v=111111"></script>
+  <script src="js/modules/structure.js?v=111111"></script>
+  <script src="js/modules/schedule.js?v=111111"></script>
+  <script src="js/modules/kpi.js?v=111111"></script>
+  <script src="js/app.js?v=111111"></script>
+</body>
+</html>
