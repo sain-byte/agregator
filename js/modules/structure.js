@@ -1,4 +1,34 @@
-// 1. TOP-LEVEL GLOBAL FUNCTIONS (Langsung terdaftar di window browser)
+// HELPER FORMAT TANGGAL INDONESIA (Contoh: 1990-10-03 -> 03 Oktober 1990)
+function formatDateIndo(dateStr) {
+  if (!dateStr || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') return '-';
+  let cleanStr = String(dateStr).trim().split('T')[0].split(' ')[0];
+  let parts = cleanStr.split('-');
+  if (parts.length !== 3) parts = cleanStr.split('/');
+  
+  const months = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+  
+  if (parts.length === 3) {
+    if (parts[0].length === 4) { // YYYY-MM-DD
+      const y = parts[0];
+      const m = parseInt(parts[1], 10);
+      const d = parts[2].padStart(2, '0');
+      if (m >= 1 && m <= 12) return `${d} ${months[m - 1]} ${y}`;
+    } else if (parts[2].length === 4) { // DD-MM-YYYY
+      const d = parts[0].padStart(2, '0');
+      const m = parseInt(parts[1], 10);
+      const y = parts[2];
+      if (m >= 1 && m <= 12) return `${d} ${months[m - 1]} ${y}`;
+    }
+  }
+  return dateStr;
+}
+
+// WINDOW GLOBAL UNTUK UPLOAD FOTO
+window.currentUploadAgentId = null;
+
 window.Agents_uploadPhoto = function(agentId) {
   window.currentUploadAgentId = agentId;
   let input = document.getElementById('global-agent-photo-input');
@@ -32,8 +62,7 @@ window.handlePhotoSelected = async function(event) {
     try {
       const res = await fetch(CONFIG.API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
+        body: JSON.stringify({
           action: 'uploadPhoto',
           agent_id: agentId,
           image: base64Data
@@ -50,9 +79,7 @@ window.handlePhotoSelected = async function(event) {
         if (img) img.src = data.photo_url || base64Data;
         
         const contentArea = document.getElementById('app-content');
-        if (contentArea && typeof StructureModule !== 'undefined') {
-          StructureModule.render(contentArea);
-        }
+        if (contentArea) StructureModule.render(contentArea);
       } else {
         throw new Error((data && data.message) || 'Gagal mengunggah foto');
       }
@@ -66,34 +93,6 @@ window.handlePhotoSelected = async function(event) {
   reader.readAsDataURL(file);
 };
 
-function formatDateIndo(dateStr) {
-  if (!dateStr || dateStr === '-' || dateStr === 'null') return '-';
-  let cleanStr = String(dateStr).trim().split('T')[0].split(' ')[0];
-  let parts = cleanStr.split('-');
-  if (parts.length !== 3) parts = cleanStr.split('/');
-  
-  const months = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-  ];
-  
-  if (parts.length === 3) {
-    if (parts[0].length === 4) { // YYYY-MM-DD
-      const y = parts[0];
-      const m = parseInt(parts[1], 10);
-      const d = parts[2].padStart(2, '0');
-      if (m >= 1 && m <= 12) return `${d} ${months[m - 1]} ${y}`;
-    } else if (parts[2].length === 4) { // DD-MM-YYYY
-      const d = parts[0].padStart(2, '0');
-      const m = parseInt(parts[1], 10);
-      const y = parts[2];
-      if (m >= 1 && m <= 12) return `${d} ${months[m - 1]} ${y}`;
-    }
-  }
-  return dateStr;
-}
-
-// 2. MAIN MODULE
 const StructureModule = {
   rawList: [],
 
