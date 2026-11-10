@@ -25,26 +25,52 @@ const StructureModule = {
   },
 
   renderData(container, data) {
+    if (!data) {
+      container.innerHTML = `<div class="p-4 text-red-400 text-xs">Response API kosong.</div>`;
+      return;
+    }
+
+    // Tampilkan pesan error resmi jika API Apps Script return error
+    if (data.status === 'error') {
+      container.innerHTML = `
+        <div class="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold">
+          ❌ Server Error: ${data.message || 'Gagal mengambil data dari Google Sheets.'}
+        </div>
+      `;
+      return;
+    }
+
     let tls = [];
     let agents = [];
 
-    // Ekstrak data fleksibel dari berbagai bentuk pembungkus JSON GAS
-    if (data) {
-      const payload = data.data || data.structure || data.result || data;
-      if (Array.isArray(payload)) {
-        tls = payload.filter(x => (x.role && String(x.role).toUpperCase().includes('TL')) || x.is_tl);
-        agents = payload.filter(x => !((x.role && String(x.role).toUpperCase().includes('TL')) || x.is_tl));
-      } else if (typeof payload === 'object') {
-        tls = payload.team_leaders || payload.teamLeaders || payload.tls || [];
-        agents = payload.agents || payload.agent_list || [];
-      }
+    // Deteksi skema pembungkus data JSON dari Apps Script
+    let target = data;
+    if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+      target = data.data;
+    } else if (data.result && typeof data.result === 'object' && !Array.isArray(data.result)) {
+      target = data.result;
+    } else if (data.structure && typeof data.structure === 'object' && !Array.isArray(data.structure)) {
+      target = data.structure;
     }
 
-    // Simpan ke cache lokal berdasar ID
+    if (Array.isArray(target)) {
+      tls = target.filter(x => x && (x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
+      agents = target.filter(x => x && !(x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
+    } else if (Array.isArray(data.data)) {
+      tls = data.data.filter(x => x && (x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
+      agents = data.data.filter(x => x && !(x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
+    } else {
+      tls = target.team_leaders || target.teamLeaders || target.tls || target.TL || [];
+      agents = target.agents || target.agent_list || target.agentList || [];
+    }
+
+    // Simpan ke Cache berdasarkan ID dan Nama
     this.cache = {};
     [...tls, ...agents].forEach(item => {
-      const id = String(item.id || item.agent_id || item.nama || '').trim();
+      if (!item) return;
+      const id = String(item.id || item.agent_id || item.agentId || item.nama || '').trim();
       if (id) this.cache[id] = item;
+      if (item.nama) this.cache[String(item.nama).trim().toLowerCase()] = item;
     });
 
     container.innerHTML = `
@@ -76,7 +102,7 @@ const StructureModule = {
         </div>
       </div>
 
-      <!-- HIDDEN FILE INPUT UNTUK UPLOAD FOTO -->
+      <!-- INPUT FILE UNTUK UPLOAD FOTO -->
       <input type="file" id="global-agent-photo-input" accept="image/*" class="hidden" onchange="StructureModule.handlePhotoSelected(event)">
     `;
 
@@ -111,7 +137,8 @@ const StructureModule = {
   },
 
   openModal(id) {
-    const person = this.cache[id];
+    const key = String(id || '').trim();
+    const person = this.cache[key] || this.cache[key.toLowerCase()];
     if (!person) return;
 
     this.selectedId = id;
@@ -246,15 +273,19 @@ const StructureModule = {
 
   formatDateIndo(dateStr) {
     if (!dateStr || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') return '-';
-    const cleanStr = String(dateStr).trim().split('T')[0].split(' ')[0];
+    let cleanStr = String(dateStr).trim();
+    if (cleanStr.includes('T')) cleanStr = cleanStr.split('T')[0];
+    cleanStr = cleanStr.split(' ')[0];
+
+    const months = [
+      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+
     let parts = cleanStr.split('-');
     if (parts.length !== 3) parts = cleanStr.split('/');
 
     if (parts.length === 3) {
-      const months = [
-        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-      ];
       if (parts[0].length === 4) {
         const year = parts[0];
         const monthNum = parseInt(parts[1], 10);
@@ -267,10 +298,20 @@ const StructureModule = {
         if (monthNum >= 1 && monthNum <= 12) return `${day} ${months[monthNum - 1]} ${year}`;
       }
     }
+
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+      const day = String(parsed.getDate()).padStart(2, '0');
+      const month = months[parsed.getMonth()];
+      const year = parsed.getFullYear();
+      return `${day} ${month} ${year}`;
+    }
+
     return dateStr;
   }
 };
 
-// Global Aliases agar tombol di HTML lawas tidak error
+// Aliases Global Window
 window.Agents_uploadPhoto = (id) => StructureModule.triggerPhotoUpload(id);
 window.openDetailModalById = (id) => StructureModule.openModal(id);
+window.openDetailModal = (id) => StructureModule.openModal(id);
