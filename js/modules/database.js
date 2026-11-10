@@ -1,10 +1,5 @@
 const DatabaseModule = {
   activeSheetTab: 'agents',
-  dataCache: {
-    agents: [],
-    schedule: [],
-    kpi: []
-  },
 
   async render(container) {
     const user = Auth.getUser();
@@ -15,7 +10,7 @@ const DatabaseModule = {
             <i data-lucide="lock" class="w-6 h-6"></i>
           </div>
           <h3 class="text-base font-bold text-white">Akses Dibatasi</h3>
-          <p class="text-xs text-slate-400">Modul Database Matrix ini khusus untuk akun ber-role <b>Team Leader (TL)</b>.</p>
+          <p class="text-xs text-slate-400">Modul Database khusus role <b>Team Leader (TL)</b>.</p>
         </div>
       `;
       if (window.lucide) lucide.createIcons();
@@ -23,35 +18,34 @@ const DatabaseModule = {
     }
 
     container.innerHTML = `
-      <div class="space-y-5">
-        <!-- HEADER & NAVIGATION TAB SHEET -->
+      <div class="space-y-4">
         <div class="glass-panel p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 border border-white/10">
           <div>
             <h3 class="text-sm font-extrabold text-white flex items-center gap-2">
               <i data-lucide="table" class="w-4 h-4 text-brand-500"></i>
-              Matrix Database GSheet
+              Inline Matrix Database
             </h3>
-            <p class="text-[11px] text-slate-400">Tampilan tabel grid data entry realtime dari Google Sheets</p>
+            <p class="text-[11px] text-slate-400">Ketik & edit langsung di sel tabel ala Excel / GSheet</p>
           </div>
 
-          <!-- TAB SWITCHER -->
-          <div class="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 overflow-x-auto">
-            <button onclick="DatabaseModule.switchSheetTab('agents')" id="db-tab-agents" 
-                    class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm">
-              <i data-lucide="users" class="w-3.5 h-3.5 inline mr-1"></i> Sheet Agent
-            </button>
-            <button onclick="DatabaseModule.switchSheetTab('schedule')" id="db-tab-schedule" 
-                    class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
-              <i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1"></i> Sheet Schedule
-            </button>
-            <button onclick="DatabaseModule.switchSheetTab('kpi')" id="db-tab-kpi" 
-                    class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
-              <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 inline mr-1"></i> Sheet KPI
-            </button>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 overflow-x-auto">
+              <button onclick="DatabaseModule.switchSheetTab('agents')" id="db-tab-agents" 
+                      class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm">
+                <i data-lucide="users" class="w-3.5 h-3.5 inline mr-1"></i> Agent
+              </button>
+              <button onclick="DatabaseModule.switchSheetTab('schedule')" id="db-tab-schedule" 
+                      class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
+                <i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1"></i> Schedule
+              </button>
+              <button onclick="DatabaseModule.switchSheetTab('kpi')" id="db-tab-kpi" 
+                      class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
+                <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 inline mr-1"></i> KPI
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- CONTAINER MAIN CONTENT TABLE -->
         <div id="db-matrix-container"></div>
       </div>
     `;
@@ -65,11 +59,9 @@ const DatabaseModule = {
     ['agents', 'schedule', 'kpi'].forEach(t => {
       const btn = document.getElementById(`db-tab-${t}`);
       if (btn) {
-        if (t === tab) {
-          btn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm";
-        } else {
-          btn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5";
-        }
+        btn.className = t === tab 
+          ? "px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm"
+          : "px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5";
       }
     });
 
@@ -84,13 +76,11 @@ const DatabaseModule = {
     `;
     if (window.lucide) lucide.createIcons();
 
-    await this.fetchAndRenderMatrix(tab, container);
+    await this.fetchAndRenderInlineGrid(tab, container);
   },
 
-  async fetchAndRenderMatrix(tab, container) {
-    let actionName = 'getStructure';
-    if (tab === 'schedule') actionName = 'getSchedule';
-    if (tab === 'kpi') actionName = 'getKPI';
+  async fetchAndRenderInlineGrid(tab, container) {
+    let actionName = tab === 'schedule' ? 'getSchedule' : (tab === 'kpi' ? 'getKPI' : 'getStructure');
 
     try {
       const res = await fetch(`${CONFIG.API_URL}?action=${actionName}`);
@@ -106,259 +96,234 @@ const DatabaseModule = {
         rows = data.data || data.schedule || data.kpi || (Array.isArray(data) ? data : []);
       }
 
-      this.dataCache[tab] = rows;
-      this.renderTableGrid(tab, rows, container);
+      this.renderEditableGrid(tab, rows, container);
     } catch (err) {
-      container.innerHTML = `
-        <div class="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold">
-          Gagal mengambil data dari Sheet: ${err.message}
-        </div>
-      `;
+      this.renderEditableGrid(tab, [], container);
     }
   },
 
-  renderTableGrid(tab, rows, container) {
-    let tableHeader = '';
-    let tableBody = '';
-
+  renderEditableGrid(tab, rows, container) {
+    let headers = [];
     if (tab === 'agents') {
-      tableHeader = `
-        <tr class="bg-slate-900/90 text-slate-300 border-b border-white/10 text-[11px] font-bold uppercase tracking-wider">
-          <th class="p-3 text-left">Nama Agent</th>
-          <th class="p-3 text-left">Role</th>
-          <th class="p-3 text-left">Vendor</th>
-          <th class="p-3 text-center">Batch</th>
-          <th class="p-3 text-left">Team Leader</th>
-          <th class="p-3 text-center">Aggregator</th>
-          <th class="p-3 text-left">Tgl Lahir</th>
-          <th class="p-3 text-left">Biodata</th>
-        </tr>
-      `;
-      tableBody = rows.length > 0 ? rows.map(r => `
-        <tr class="border-b border-white/5 hover:bg-white/5 transition text-xs">
-          <td class="p-3 font-semibold text-white whitespace-nowrap">${r.nama || r.name || '-'}</td>
-          <td class="p-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20 font-semibold text-[10px]">${r.role || 'Agent'}</span></td>
-          <td class="p-3 text-slate-300 whitespace-nowrap">${r.vendor || r.mitra || '-'}</td>
-          <td class="p-3 text-center text-slate-300">${r.batch || '-'}</td>
-          <td class="p-3 text-slate-300 whitespace-nowrap">${r.tl || r.team_leader || '-'}</td>
-          <td class="p-3 text-center font-bold text-amber-400">${r.aggregator || '-'}</td>
-          <td class="p-3 text-slate-300 whitespace-nowrap">${r.tgl_lahir || r.tanggal_lahir || '-'}</td>
-          <td class="p-3 text-slate-400 max-w-xs truncate">${r.biodata || r.keterangan || '-'}</td>
-        </tr>
-      `).join('') : `<tr><td colspan="8" class="p-4 text-center text-slate-500 italic text-xs">Belum ada data di Sheet Agent.</td></tr>`;
+      headers = ['Nama Agent', 'Role', 'Vendor', 'Batch', 'Team Leader', 'Aggregator', 'Tgl Lahir', 'Biodata'];
     } else if (tab === 'schedule') {
-      tableHeader = `
-        <tr class="bg-slate-900/90 text-slate-300 border-b border-white/10 text-[11px] font-bold uppercase tracking-wider">
-          <th class="p-3 text-left">Nama Agent</th>
-          <th class="p-3 text-left">Tanggal</th>
-          <th class="p-3 text-center">Shift</th>
-          <th class="p-3 text-left">Keterangan</th>
-        </tr>
-      `;
-      tableBody = rows.length > 0 ? rows.map(r => `
-        <tr class="border-b border-white/5 hover:bg-white/5 transition text-xs">
-          <td class="p-3 font-semibold text-white whitespace-nowrap">${r.nama || '-'}</td>
-          <td class="p-3 text-slate-300 whitespace-nowrap">${r.tanggal || '-'}</td>
-          <td class="p-3 text-center whitespace-nowrap"><span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[10px]">${r.shift || '-'}</span></td>
-          <td class="p-3 text-slate-400">${r.keterangan || '-'}</td>
-        </tr>
-      `).join('') : `<tr><td colspan="4" class="p-4 text-center text-slate-500 italic text-xs">Belum ada data di Sheet Schedule.</td></tr>`;
+      headers = ['Nama Agent', 'Tanggal', 'Shift', 'Keterangan'];
     } else if (tab === 'kpi') {
-      tableHeader = `
-        <tr class="bg-slate-900/90 text-slate-300 border-b border-white/10 text-[11px] font-bold uppercase tracking-wider">
-          <th class="p-3 text-left">Nama Agent</th>
-          <th class="p-3 text-left">Periode</th>
-          <th class="p-3 text-center">Score Quality</th>
-          <th class="p-3 text-center">Score Productivity</th>
-        </tr>
-      `;
-      tableBody = rows.length > 0 ? rows.map(r => `
-        <tr class="border-b border-white/5 hover:bg-white/5 transition text-xs">
-          <td class="p-3 font-semibold text-white whitespace-nowrap">${r.nama || '-'}</td>
-          <td class="p-3 text-slate-300 whitespace-nowrap">${r.periode || '-'}</td>
-          <td class="p-3 text-center font-bold text-emerald-400">${r.quality || r.score_quality || '-'}%</td>
-          <td class="p-3 text-center font-bold text-brand-400">${r.productivity || r.score_productivity || '-'}</td>
-        </tr>
-      `).join('') : `<tr><td colspan="4" class="p-4 text-center text-slate-500 italic text-xs">Belum ada data di Sheet KPI.</td></tr>`;
+      headers = ['Nama Agent', 'Periode', 'Quality (%)', 'Productivity'];
     }
 
     container.innerHTML = `
-      <div class="glass-panel rounded-3xl overflow-hidden border border-white/10 space-y-4 p-4">
-        <!-- TOP TOOLBAR TABEL & BUTTON TAMBAH -->
-        <div class="flex items-center justify-between gap-3 pb-2 border-b border-white/10">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-bold text-slate-300">Total Baris:</span>
-            <span class="px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold border border-brand-500/30">${rows.length}</span>
+      <div class="glass-panel p-4 rounded-3xl border border-white/10 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-slate-400 font-semibold">Total Baris:</span>
+            <span id="db-row-count" class="px-2 py-0.5 rounded-md bg-brand-500/20 text-brand-400 font-bold border border-brand-500/30">${rows.length}</span>
+            <span class="text-[11px] text-amber-400 italic font-medium ml-2">💡 Sel tabel bisa diketik langsung!</span>
           </div>
 
-          <button onclick="DatabaseModule.openAddRowModal('${tab}')" class="px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-brand-glow flex items-center gap-1.5">
-            <i data-lucide="plus-circle" class="w-4 h-4"></i>
-            <span>+ Tambah Baris Baru</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="DatabaseModule.addEmptyRow('${tab}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl border border-white/10 transition flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-4 h-4 text-emerald-400"></i>
+              <span>+ Baris Kosong</span>
+            </button>
+
+            <button onclick="DatabaseModule.saveAllRows('${tab}')" id="btn-db-save-all" class="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-brand-glow flex items-center gap-1.5">
+              <i data-lucide="save" class="w-4 h-4"></i>
+              <span>Simpan Perubahan</span>
+            </button>
+          </div>
         </div>
 
-        <!-- MATRIX SPREADSHEET TABLE GRID (SCROLLABLE HP) -->
-        <div class="overflow-x-auto rounded-xl border border-white/10 max-h-[500px]">
-          <table class="w-full text-left border-collapse">
-            <thead>${tableHeader}</thead>
-            <tbody>${tableBody}</tbody>
+        <div id="db-status-banner" class="hidden text-xs p-3 rounded-xl"></div>
+
+        <div class="overflow-x-auto rounded-xl border border-white/10 max-h-[520px]">
+          <table class="w-full text-left border-collapse" id="db-matrix-table">
+            <thead>
+              <tr class="bg-slate-900/90 text-slate-300 border-b border-white/10 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10 backdrop-blur-md">
+                <th class="p-2.5 text-center w-10 border-r border-white/10">#</th>
+                ${headers.map(h => `<th class="p-2.5 min-w-[130px] border-r border-white/10 last:border-r-0">${h}</th>`).join('')}
+                <th class="p-2.5 text-center w-10">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="db-table-body">
+              ${rows.length > 0 
+                ? rows.map((r, idx) => this.createRowHtml(tab, r, idx + 1)).join('') 
+                : this.createRowHtml(tab, {}, 1)}
+            </tbody>
           </table>
         </div>
       </div>
     `;
 
     if (window.lucide) lucide.createIcons();
+    this.updateRowCount();
   },
 
-  // MODAL INPUT DATA BARU SESUAI SHEET TAB
-  openAddRowModal(tab) {
-    let modal = document.getElementById('db-add-row-modal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'db-add-row-modal';
-      modal.className = 'fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4';
-      document.body.appendChild(modal);
-    }
-
-    let formFields = '';
-    let title = '';
-
+  createRowHtml(tab, r, num) {
     if (tab === 'agents') {
-      title = 'Tambah Baris Baru (Sheet Agent)';
-      formFields = `
-        <div class="space-y-3 text-xs">
-          <div><label class="block font-semibold mb-1">Nama Agent</label><input type="text" id="add-ag-nama" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          <div><label class="block font-semibold mb-1">Role</label><select id="add-ag-role" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"><option value="Agent">Agent</option><option value="TL">Team Leader</option></select></div>
-          <div class="grid grid-cols-2 gap-2">
-            <div><label class="block font-semibold mb-1">Vendor</label><input type="text" id="add-ag-vendor" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-            <div><label class="block font-semibold mb-1">Batch</label><input type="text" id="add-ag-batch" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div><label class="block font-semibold mb-1">Team Leader</label><input type="text" id="add-ag-tl" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-            <div><label class="block font-semibold mb-1">Aggregator</label><input type="text" id="add-ag-agg" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          </div>
-          <div><label class="block font-semibold mb-1">Tanggal Lahir</label><input type="date" id="add-ag-tgl" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          <div><label class="block font-semibold mb-1">Biodata / Ket</label><input type="text" id="add-ag-bio" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-        </div>
+      return `
+        <tr class="db-data-row border-b border-white/5 hover:bg-slate-900/40 transition text-xs">
+          <td class="p-2 text-center text-slate-500 font-mono font-bold bg-slate-900/30 border-r border-white/5">${num}</td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-nama w-full bg-transparent px-2 py-1.5 text-white focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.nama || r.name || ''}" placeholder="Nama Agent"></td>
+          <td class="p-1 border-r border-white/5">
+            <select class="cell-role w-full bg-transparent px-1.5 py-1.5 text-brand-400 font-semibold focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded">
+              <option value="Agent" ${!r.role || r.role === 'Agent' ? 'selected' : ''}>Agent</option>
+              <option value="TL" ${r.role === 'TL' || r.is_tl ? 'selected' : ''}>TL</option>
+            </select>
+          </td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-vendor w-full bg-transparent px-2 py-1.5 text-slate-300 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.vendor || r.mitra || ''}" placeholder="Vendor"></td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-batch w-full bg-transparent px-2 py-1.5 text-slate-300 text-center focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.batch || ''}" placeholder="Batch"></td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-tl w-full bg-transparent px-2 py-1.5 text-slate-300 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.tl || r.team_leader || ''}" placeholder="Team Leader"></td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-agg w-full bg-transparent px-2 py-1.5 text-amber-400 font-bold text-center focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.aggregator || ''}" placeholder="1/2/3"></td>
+          <td class="p-1 border-r border-white/5"><input type="date" class="cell-tgl w-full bg-transparent px-1.5 py-1.5 text-slate-300 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.tgl_lahir || r.tanggal_lahir || ''}"></td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-bio w-full bg-transparent px-2 py-1.5 text-slate-400 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.biodata || r.keterangan || ''}" placeholder="Biodata"></td>
+          <td class="p-1 text-center">
+            <button onclick="this.closest('tr').remove(); DatabaseModule.updateRowCount();" class="p-1 text-slate-500 hover:text-red-400 transition" title="Hapus Baris">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </td>
+        </tr>
       `;
     } else if (tab === 'schedule') {
-      title = 'Tambah Baris Baru (Sheet Schedule)';
-      formFields = `
-        <div class="space-y-3 text-xs">
-          <div><label class="block font-semibold mb-1">Nama Agent</label><input type="text" id="add-sch-nama" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          <div><label class="block font-semibold mb-1">Tanggal</label><input type="date" id="add-sch-tgl" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          <div><label class="block font-semibold mb-1">Shift</label><select id="add-sch-shift" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"><option value="Morning">Morning</option><option value="Middle">Middle</option><option value="Night">Night</option><option value="OFF">OFF</option></select></div>
-          <div><label class="block font-semibold mb-1">Keterangan</label><input type="text" id="add-sch-ket" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-        </div>
+      return `
+        <tr class="db-data-row border-b border-white/5 hover:bg-slate-900/40 transition text-xs">
+          <td class="p-2 text-center text-slate-500 font-mono font-bold bg-slate-900/30 border-r border-white/5">${num}</td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-nama w-full bg-transparent px-2 py-1.5 text-white focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.nama || ''}" placeholder="Nama Agent"></td>
+          <td class="p-1 border-r border-white/5"><input type="date" class="cell-tgl w-full bg-transparent px-1.5 py-1.5 text-slate-300 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.tanggal || ''}"></td>
+          <td class="p-1 border-r border-white/5">
+            <select class="cell-shift w-full bg-transparent px-1.5 py-1.5 text-emerald-400 font-bold focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded">
+              <option value="Morning" ${r.shift === 'Morning' ? 'selected' : ''}>Morning</option>
+              <option value="Middle" ${r.shift === 'Middle' ? 'selected' : ''}>Middle</option>
+              <option value="Night" ${r.shift === 'Night' ? 'selected' : ''}>Night</option>
+              <option value="OFF" ${r.shift === 'OFF' ? 'selected' : ''}>OFF</option>
+              <option value="Cuti" ${r.shift === 'Cuti' ? 'selected' : ''}>Cuti</option>
+            </select>
+          </td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-ket w-full bg-transparent px-2 py-1.5 text-slate-400 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.keterangan || ''}" placeholder="Keterangan"></td>
+          <td class="p-1 text-center">
+            <button onclick="this.closest('tr').remove(); DatabaseModule.updateRowCount();" class="p-1 text-slate-500 hover:text-red-400 transition" title="Hapus Baris">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </td>
+        </tr>
       `;
     } else if (tab === 'kpi') {
-      title = 'Tambah Baris Baru (Sheet KPI)';
-      formFields = `
-        <div class="space-y-3 text-xs">
-          <div><label class="block font-semibold mb-1">Nama Agent</label><input type="text" id="add-kpi-nama" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          <div><label class="block font-semibold mb-1">Periode</label><input type="month" id="add-kpi-periode" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          <div class="grid grid-cols-2 gap-2">
-            <div><label class="block font-semibold mb-1">Score Quality (%)</label><input type="number" step="0.01" id="add-kpi-quality" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-            <div><label class="block font-semibold mb-1">Score Productivity</label><input type="number" step="0.01" id="add-kpi-prod" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
-          </div>
-        </div>
+      return `
+        <tr class="db-data-row border-b border-white/5 hover:bg-slate-900/40 transition text-xs">
+          <td class="p-2 text-center text-slate-500 font-mono font-bold bg-slate-900/30 border-r border-white/5">${num}</td>
+          <td class="p-1 border-r border-white/5"><input type="text" class="cell-nama w-full bg-transparent px-2 py-1.5 text-white focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.nama || ''}" placeholder="Nama Agent"></td>
+          <td class="p-1 border-r border-white/5"><input type="month" class="cell-periode w-full bg-transparent px-1.5 py-1.5 text-slate-300 focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.periode || ''}"></td>
+          <td class="p-1 border-r border-white/5"><input type="number" step="0.01" class="cell-quality w-full bg-transparent px-2 py-1.5 text-emerald-400 font-bold focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.quality || r.score_quality || ''}" placeholder="100"></td>
+          <td class="p-1 border-r border-white/5"><input type="number" step="0.01" class="cell-prod w-full bg-transparent px-2 py-1.5 text-brand-400 font-bold focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded" value="${r.productivity || r.score_productivity || ''}" placeholder="95"></td>
+          <td class="p-1 text-center">
+            <button onclick="this.closest('tr').remove(); DatabaseModule.updateRowCount();" class="p-1 text-slate-500 hover:text-red-400 transition" title="Hapus Baris">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </td>
+        </tr>
       `;
     }
-
-    modal.innerHTML = `
-      <div class="glass-panel border border-white/10 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-        <button onclick="document.getElementById('db-add-row-modal').classList.add('hidden')" class="absolute top-5 right-5 text-slate-400 hover:text-white">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-
-        <h3 class="text-sm font-bold text-white border-b border-white/10 pb-2 flex items-center gap-2">
-          <i data-lucide="plus-circle" class="w-4 h-4 text-brand-500"></i>
-          ${title}
-        </h3>
-
-        <form onsubmit="DatabaseModule.saveRowData(event, '${tab}')" class="space-y-4">
-          ${formFields}
-
-          <div id="add-row-msg" class="hidden text-xs p-3 rounded-xl"></div>
-
-          <button type="submit" id="btn-save-row" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-brand-glow">
-            Simpan Baris Baru Ke GSheet
-          </button>
-        </form>
-      </div>
-    `;
-
-    modal.classList.remove('hidden');
-    if (window.lucide) lucide.createIcons();
   },
 
-  async saveRowData(e, tab) {
-    e.preventDefault();
-    const msg = document.getElementById('add-row-msg');
-    const btn = document.getElementById('btn-save-row');
+  addEmptyRow(tab) {
+    const tbody = document.getElementById('db-table-body');
+    if (!tbody) return;
+    const nextNum = tbody.querySelectorAll('.db-data-row').length + 1;
+    const tempDiv = document.createElement('tbody');
+    tempDiv.innerHTML = this.createRowHtml(tab, {}, nextNum);
+    tbody.appendChild(tempDiv.firstElementChild);
+    if (window.lucide) lucide.createIcons();
+    this.updateRowCount();
+  },
 
-    btn.innerText = "Menyimpan Ke Sheet...";
+  updateRowCount() {
+    const rows = document.querySelectorAll('#db-table-body .db-data-row');
+    const badge = document.getElementById('db-row-count');
+    if (badge) badge.innerText = rows.length;
+  },
+
+  async saveAllRows(tab) {
+    const btn = document.getElementById('btn-db-save-all');
+    const banner = document.getElementById('db-status-banner');
+    const rowEls = document.querySelectorAll('#db-table-body .db-data-row');
+
+    btn.innerText = "Simpan Data...";
     btn.disabled = true;
 
-    let action = 'saveAgent';
-    let payload = {};
+    banner.className = "text-xs p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20";
+    banner.innerText = "Mengirim data tabel ke Google Sheet...";
+    banner.classList.remove('hidden');
 
-    if (tab === 'agents') {
-      action = 'saveAgent';
-      payload = {
-        nama: document.getElementById('add-ag-nama').value,
-        role: document.getElementById('add-ag-role').value,
-        vendor: document.getElementById('add-ag-vendor').value,
-        batch: document.getElementById('add-ag-batch').value,
-        tl: document.getElementById('add-ag-tl').value,
-        aggregator: document.getElementById('add-ag-agg').value,
-        tgl_lahir: document.getElementById('add-ag-tgl').value,
-        biodata: document.getElementById('add-ag-bio').value
+    const dataList = [];
+    rowEls.forEach(row => {
+      const getVal = (cls) => {
+        const el = row.querySelector('.' + cls);
+        return el ? el.value.trim() : '';
       };
-    } else if (tab === 'schedule') {
-      action = 'saveSchedule';
-      payload = {
-        nama: document.getElementById('add-sch-nama').value,
-        tanggal: document.getElementById('add-sch-tgl').value,
-        shift: document.getElementById('add-sch-shift').value,
-        keterangan: document.getElementById('add-sch-ket').value
-      };
-    } else if (tab === 'kpi') {
-      action = 'saveKPI';
-      payload = {
-        nama: document.getElementById('add-kpi-nama').value,
-        periode: document.getElementById('add-kpi-periode').value,
-        quality: document.getElementById('add-kpi-quality').value,
-        productivity: document.getElementById('add-kpi-prod').value
-      };
-    }
+
+      if (tab === 'agents') {
+        const nama = getVal('cell-nama');
+        if (nama) {
+          dataList.push({
+            nama,
+            role: getVal('cell-role'),
+            vendor: getVal('cell-vendor'),
+            batch: getVal('cell-batch'),
+            tl: getVal('cell-tl'),
+            aggregator: getVal('cell-agg'),
+            tgl_lahir: getVal('cell-tgl'),
+            biodata: getVal('cell-bio')
+          });
+        }
+      } else if (tab === 'schedule') {
+        const nama = getVal('cell-nama');
+        if (nama) {
+          dataList.push({
+            nama,
+            tanggal: getVal('cell-tgl'),
+            shift: getVal('cell-shift'),
+            keterangan: getVal('cell-ket')
+          });
+        }
+      } else if (tab === 'kpi') {
+        const nama = getVal('cell-nama');
+        if (nama) {
+          dataList.push({
+            nama,
+            periode: getVal('cell-periode'),
+            quality: getVal('cell-quality'),
+            productivity: getVal('cell-prod')
+          });
+        }
+      }
+    });
+
+    let action = 'saveBulkAgents';
+    if (tab === 'schedule') action = 'saveBulkSchedule';
+    if (tab === 'kpi') action = 'saveBulkKPI';
 
     try {
       const res = await fetch(CONFIG.API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ action, ...payload })
+        body: new URLSearchParams({
+          action,
+          rows: JSON.stringify(dataList)
+        })
       });
 
       const data = await res.json();
       if (data && (data.status === 'success' || data.result === 'success')) {
-        msg.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-        msg.innerText = "✅ Baris data baru berhasil disimpan!";
-        msg.classList.remove('hidden');
-
-        setTimeout(() => {
-          document.getElementById('db-add-row-modal').classList.add('hidden');
-          this.switchSheetTab(tab);
-        }, 1200);
+        banner.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        banner.innerText = `✅ Berhasil menyimpan ${dataList.length} baris data ke Google Sheet!`;
       } else {
-        throw new Error((data && data.message) || 'Gagal menyimpan data.');
+        throw new Error((data && data.message) || 'Gagal update Google Sheet');
       }
     } catch (err) {
-      msg.className = "text-xs p-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
-      msg.innerText = "❌ Error: " + err.message;
-      msg.classList.remove('hidden');
+      banner.className = "text-xs p-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
+      banner.innerText = "❌ Status Kirim: " + err.message;
     } finally {
-      btn.innerText = "Simpan Baris Baru Ke GSheet";
+      btn.innerText = "Simpan Perubahan";
       btn.disabled = false;
     }
   }
