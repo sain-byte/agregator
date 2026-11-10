@@ -18,7 +18,8 @@ function formatDateIndo(dateStr) {
   return dateStr;
 }
 
-// TOP-LEVEL GLOBAL FUNCTIONS FOR PHOTO UPLOAD
+// CACHE MAP GLOBAL UNTUK MENGHINDARI ERROR SINTAKS QUOTE PADA ONCLICK
+window.agentCacheMap = {};
 window.selectedAgentForPhoto = null;
 
 function Agents_uploadPhoto(agentId) {
@@ -65,7 +66,7 @@ window.handlePhotoSelected = async function(event) {
       });
 
       const data = await res.json();
-      if (data.status === 'success') {
+      if (data.status === 'success' || data.photo_url) {
         if (statusMsg) {
           statusMsg.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
           statusMsg.innerText = "Foto berhasil diperbarui!";
@@ -88,9 +89,20 @@ window.handlePhotoSelected = async function(event) {
   reader.readAsDataURL(file);
 };
 
-window.openDetailModal = function(id, nama, role, agg, batch, vendor, tl, tglLahir, biodata, photo) {
+window.openDetailModalById = function(id) {
+  const person = window.agentCacheMap[id];
+  if (!person) return;
+
   window.selectedAgentForPhoto = id;
-  const formattedTgl = formatDateIndo(tglLahir);
+  const formattedTgl = formatDateIndo(person.tgl_lahir || person.tanggal_lahir);
+  const photo = person.photo || person.foto || 'https://via.placeholder.com/150';
+  const role = person.role === 'TL' || person.is_tl ? 'Team Leader' : 'Agent';
+  const agg = person.aggregator ? `Agregator ${person.aggregator}` : 'Agregator -';
+  const nama = person.nama || person.name || '-';
+  const batch = person.batch || '-';
+  const vendor = person.vendor || '-';
+  const tl = person.tl || person.team_leader || '-';
+  const biodata = person.biodata || person.keterangan || '-';
   
   let modal = document.getElementById('agent-detail-modal');
   if (!modal) {
@@ -164,19 +176,29 @@ const StructureModule = {
       const res = await fetch(`${CONFIG.API_URL}?action=getStructure`);
       const data = await res.json();
 
-      if (data.status === 'success') {
+      if (data && (data.status === 'success' || data.team_leaders || data.agents || Array.isArray(data))) {
         this.renderData(container, data);
       } else {
-        container.innerHTML = `<div class="text-red-400 p-4">Gagal memuat data struktur.</div>`;
+        container.innerHTML = `<div class="text-red-400 p-4 font-semibold">Gagal memuat data struktur: format data API tidak sesuai.</div>`;
       }
     } catch (err) {
-      container.innerHTML = `<div class="text-red-400 p-4">Error koneksi: ${err.message}</div>`;
+      container.innerHTML = `<div class="text-red-400 p-4 font-semibold">Error koneksi: ${err.message}</div>`;
     }
   },
 
   renderData(container, data) {
-    const tls = data.team_leaders || [];
+    const tls = data.team_leaders || data.tls || [];
     const agents = data.agents || [];
+
+    window.agentCacheMap = {};
+    tls.forEach(item => {
+      const id = item.id || item.agent_id || item.nama;
+      window.agentCacheMap[id] = item;
+    });
+    agents.forEach(item => {
+      const id = item.id || item.agent_id || item.nama;
+      window.agentCacheMap[id] = item;
+    });
 
     let html = `
       <div class="space-y-6">
@@ -209,7 +231,8 @@ const StructureModule = {
   },
 
   createCardHtml(person, isTL) {
-    const photoUrl = person.photo || 'https://via.placeholder.com/150';
+    const id = person.id || person.agent_id || person.nama;
+    const photoUrl = person.photo || person.foto || 'https://via.placeholder.com/150';
     const roleBadge = isTL ? 'Team Leader' : 'Agent';
     const aggText = person.aggregator ? `Agregator ${person.aggregator}` : 'Agregator -';
 
@@ -223,10 +246,10 @@ const StructureModule = {
           <div class="flex items-center gap-2 mb-1">
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20 truncate">${aggText}</span>
           </div>
-          <h4 class="text-sm font-bold text-white light:text-slate-900 truncate">${person.nama}</h4>
+          <h4 class="text-sm font-bold text-white light:text-slate-900 truncate">${person.nama || person.name}</h4>
           <p class="text-xs text-slate-400 truncate">${person.vendor || '-'} • ${roleBadge}</p>
         </div>
-        <button onclick="window.openDetailModal('${person.id || person.agent_id}', '${person.nama}', '${roleBadge}', '${aggText}', '${person.batch || '-'}', '${person.vendor || '-'}', '${person.tl || '-'}', '${person.tgl_lahir || '-'}', '${person.biodata || '-'}', '${photoUrl}')" 
+        <button onclick="window.openDetailModalById('${id}')" 
                 class="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition">
           <i data-lucide="chevron-right" class="w-5 h-5"></i>
         </button>
