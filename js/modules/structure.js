@@ -1,18 +1,25 @@
-// HELPER FORMAT TANGGAL INDONESIA (1990-10-03 -> 03 Oktober 1990)
+// HELPER FORMAT TANGGAL INDONESIA (Contoh: 1990-10-03 atau 03/10/1990 -> 03 Oktober 1990)
 function formatDateIndo(dateStr) {
   if (!dateStr || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') return '-';
-  const cleanStr = String(dateStr).trim().split('T')[0];
-  const parts = cleanStr.split('-');
+  const cleanStr = String(dateStr).trim().split('T')[0].split(' ')[0];
+  let parts = cleanStr.split('-');
+  if (parts.length !== 3) parts = cleanStr.split('/');
+  
   if (parts.length === 3) {
-    const year = parts[0];
-    const monthNum = parseInt(parts[1], 10);
-    const day = parts[2].padStart(2, '0');
     const months = [
       "Januari", "Februari", "Maret", "April", "Mei", "Juni",
       "Juli", "Agustus", "September", "Oktober", "November", "Desember"
     ];
-    if (monthNum >= 1 && monthNum <= 12) {
-      return `${day} ${months[monthNum - 1]} ${year}`;
+    if (parts[0].length === 4) {
+      const year = parts[0];
+      const monthNum = parseInt(parts[1], 10);
+      const day = parts[2].padStart(2, '0');
+      if (monthNum >= 1 && monthNum <= 12) return `${day} ${months[monthNum - 1]} ${year}`;
+    } else if (parts[2].length === 4) {
+      const day = parts[0].padStart(2, '0');
+      const monthNum = parseInt(parts[1], 10);
+      const year = parts[2];
+      if (monthNum >= 1 && monthNum <= 12) return `${day} ${months[monthNum - 1]} ${year}`;
     }
   }
   return dateStr;
@@ -21,7 +28,7 @@ function formatDateIndo(dateStr) {
 window.agentCacheMap = {};
 window.selectedAgentForPhoto = null;
 
-function Agents_uploadPhoto(agentId) {
+window.Agents_uploadPhoto = function(agentId) {
   window.selectedAgentForPhoto = agentId;
   let fileInput = document.getElementById('global-agent-photo-input');
   if (!fileInput) {
@@ -34,8 +41,7 @@ function Agents_uploadPhoto(agentId) {
     document.body.appendChild(fileInput);
   }
   fileInput.click();
-}
-window.Agents_uploadPhoto = Agents_uploadPhoto;
+};
 
 window.handlePhotoSelected = async function(event) {
   const file = event.target.files[0];
@@ -76,7 +82,7 @@ window.handlePhotoSelected = async function(event) {
         const contentArea = document.getElementById('app-content');
         if (contentArea) StructureModule.render(contentArea);
       } else {
-        throw new Error(data.message || 'Gagal menyimpan foto');
+        throw new Error((data && data.message) || 'Gagal menyimpan foto');
       }
     } catch (err) {
       if (statusMsg) {
@@ -93,16 +99,18 @@ window.openDetailModalById = function(id) {
   if (!person) return;
 
   window.selectedAgentForPhoto = id;
-  const formattedTgl = formatDateIndo(person.tgl_lahir || person.tanggal_lahir);
-  const photo = person.photo || person.foto || 'https://via.placeholder.com/150';
-  const isTL = person.role === 'TL' || person.is_tl || String(person.role).toUpperCase().includes('LEADER');
+  const rawTgl = person.tgl_lahir || person.tanggal_lahir || person.birth_date;
+  const formattedTgl = formatDateIndo(rawTgl);
+  const photo = person.photo || person.foto || person.avatar || 'https://via.placeholder.com/150';
+  const roleStr = String(person.role || person.jabatan || '').toUpperCase();
+  const isTL = person.is_tl || person.isTL || roleStr === 'TL' || roleStr.includes('LEADER');
   const role = isTL ? 'Team Leader' : 'Agent';
   const agg = person.aggregator ? `Agregator ${person.aggregator}` : 'Agregator -';
   const nama = person.nama || person.name || '-';
   const batch = person.batch || '-';
-  const vendor = person.vendor || '-';
-  const tl = person.tl || person.team_leader || '-';
-  const biodata = person.biodata || person.keterangan || '-';
+  const vendor = person.vendor || person.mitra || '-';
+  const tl = person.tl || person.team_leader || person.teamLeader || '-';
+  const biodata = person.biodata || person.keterangan || person.bio || '-';
   
   let modal = document.getElementById('agent-detail-modal');
   if (!modal) {
@@ -125,7 +133,7 @@ window.openDetailModalById = function(id) {
         <div>
           <h3 class="text-base font-extrabold text-white">${nama}</h3>
           <p class="text-xs text-brand-400 font-medium">${role} — ${agg}</p>
-          <button onclick="Agents_uploadPhoto('${id}')" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 text-xs font-semibold rounded-lg border border-brand-500/30 transition">
+          <button onclick="window.Agents_uploadPhoto('${id}')" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 text-xs font-semibold rounded-lg border border-brand-500/30 transition">
             <i data-lucide="camera" class="w-3.5 h-3.5"></i>
             <span>Ubah Foto</span>
           </button>
@@ -181,22 +189,45 @@ const StructureModule = {
     }
   },
 
-  renderData(container, data) {
-    let raw = data ? (data.data || data.structure || data) : [];
+  extractLists(data) {
     let tls = [];
     let agents = [];
 
-    if (Array.isArray(raw)) {
-      tls = raw.filter(item => item.role === 'TL' || item.is_tl || String(item.role).toUpperCase().includes('LEADER'));
-      agents = raw.filter(item => !(item.role === 'TL' || item.is_tl || String(item.role).toUpperCase().includes('LEADER')));
-    } else if (typeof raw === 'object' && raw !== null) {
-      tls = raw.team_leaders || raw.tls || [];
-      agents = raw.agents || [];
+    if (!data) return { tls, agents };
+
+    const candidates = [data, data.data, data.result, data.structure, data.payload].filter(Boolean);
+
+    for (const obj of candidates) {
+      if (Array.isArray(obj)) {
+        obj.forEach(item => {
+          const roleStr = String(item.role || item.jabatan || item.position || '').toUpperCase();
+          if (item.is_tl || item.isTL || roleStr === 'TL' || roleStr.includes('LEADER')) {
+            tls.push(item);
+          } else {
+            agents.push(item);
+          }
+        });
+        if (tls.length > 0 || agents.length > 0) return { tls, agents };
+      } else if (typeof obj === 'object') {
+        const foundTL = obj.team_leaders || obj.teamLeaders || obj.tls || obj.TL || obj.tl_list;
+        const foundAgents = obj.agents || obj.agentList || obj.agent_list || obj.agents_list;
+
+        if (Array.isArray(foundTL)) tls = foundTL;
+        if (Array.isArray(foundAgents)) agents = foundAgents;
+
+        if (tls.length > 0 || agents.length > 0) return { tls, agents };
+      }
     }
+
+    return { tls, agents };
+  },
+
+  renderData(container, data) {
+    const { tls, agents } = this.extractLists(data);
 
     window.agentCacheMap = {};
     const registerCache = (item) => {
-      const id = item.id || item.agent_id || item.nama;
+      const id = item.id || item.agent_id || item.agentId || item.nama;
       if (id) window.agentCacheMap[id] = item;
     };
     tls.forEach(registerCache);
@@ -233,8 +264,8 @@ const StructureModule = {
   },
 
   createCardHtml(person, isTL) {
-    const id = person.id || person.agent_id || person.nama;
-    const photoUrl = person.photo || person.foto || 'https://via.placeholder.com/150';
+    const id = person.id || person.agent_id || person.agentId || person.nama;
+    const photoUrl = person.photo || person.foto || person.avatar || 'https://via.placeholder.com/150';
     const roleBadge = isTL ? 'Team Leader' : 'Agent';
     const aggText = person.aggregator ? `Agregator ${person.aggregator}` : 'Agregator -';
 
@@ -249,7 +280,7 @@ const StructureModule = {
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20 truncate">${aggText}</span>
           </div>
           <h4 class="text-sm font-bold text-white light:text-slate-900 truncate">${person.nama || person.name || '-'}</h4>
-          <p class="text-xs text-slate-400 truncate">${person.vendor || '-'} • ${roleBadge}</p>
+          <p class="text-xs text-slate-400 truncate">${person.vendor || person.mitra || '-'} • ${roleBadge}</p>
         </div>
         <button onclick="window.openDetailModalById('${id}')" 
                 class="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition">
