@@ -11,98 +11,82 @@ const StructureModule = {
     `;
     if (window.lucide) lucide.createIcons();
 
-    try {
-      const res = await fetch(`${CONFIG.API_URL}?action=getStructure`);
-      const data = await res.json();
+    // Fallback otomatis mencoba action: getStructure -> getAgents -> getProfiles
+    const actions = ['getStructure', 'getAgents', 'getProfiles'];
+    let data = null;
+    let lastError = '';
+
+    for (const act of actions) {
+      try {
+        const res = await fetch(`${CONFIG.API_URL}?action=${act}`);
+        const result = await res.json();
+        
+        if (result && result.status !== 'error') {
+          data = result;
+          break;
+        } else if (result && result.message) {
+          lastError = result.message;
+        }
+      } catch (err) {
+        lastError = err.message;
+      }
+    }
+
+    if (data) {
       this.renderData(container, data);
-    } catch (err) {
+    } else {
       container.innerHTML = `
         <div class="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold">
-          Gagal memuat data struktur: ${err.message}
+          ❌ Server Error: ${lastError || 'Action GET tidak valid di Apps Script backend.'}
         </div>
       `;
     }
   },
 
   renderData(container, data) {
-    if (!data) {
-      container.innerHTML = `<div class="p-4 text-red-400 text-xs">Response API kosong.</div>`;
-      return;
-    }
-
-    // Tampilkan pesan error resmi jika API Apps Script return error
-    if (data.status === 'error') {
-      container.innerHTML = `
-        <div class="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold">
-          ❌ Server Error: ${data.message || 'Gagal mengambil data dari Google Sheets.'}
-        </div>
-      `;
-      return;
-    }
-
     let tls = [];
     let agents = [];
 
-    // Deteksi skema pembungkus data JSON dari Apps Script
-    let target = data;
-    if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
-      target = data.data;
-    } else if (data.result && typeof data.result === 'object' && !Array.isArray(data.result)) {
-      target = data.result;
-    } else if (data.structure && typeof data.structure === 'object' && !Array.isArray(data.structure)) {
-      target = data.structure;
+    const payload = data.data || data.structure || data.result || data;
+
+    if (Array.isArray(payload)) {
+      tls = payload.filter(x => x && (x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
+      agents = payload.filter(x => x && !(x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
+    } else if (typeof payload === 'object' && payload !== null) {
+      tls = payload.team_leaders || payload.teamLeaders || payload.tls || [];
+      agents = payload.agents || payload.agent_list || payload.agentList || [];
     }
 
-    if (Array.isArray(target)) {
-      tls = target.filter(x => x && (x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
-      agents = target.filter(x => x && !(x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
-    } else if (Array.isArray(data.data)) {
-      tls = data.data.filter(x => x && (x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
-      agents = data.data.filter(x => x && !(x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
-    } else {
-      tls = target.team_leaders || target.teamLeaders || target.tls || target.TL || [];
-      agents = target.agents || target.agent_list || target.agentList || [];
-    }
-
-    // Simpan ke Cache berdasarkan ID dan Nama
     this.cache = {};
     [...tls, ...agents].forEach(item => {
       if (!item) return;
       const id = String(item.id || item.agent_id || item.agentId || item.nama || '').trim();
       if (id) this.cache[id] = item;
-      if (item.nama) this.cache[String(item.nama).trim().toLowerCase()] = item;
     });
 
     container.innerHTML = `
       <div class="space-y-6">
-        <!-- TEAM LEADER SECTION -->
         <div>
           <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
             <i data-lucide="shield" class="w-4 h-4 text-brand-500"></i>
             Team Leader (${tls.length})
           </h3>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            ${tls.length > 0 
-              ? tls.map(tl => this.createCardHtml(tl, true)).join('') 
-              : '<p class="text-xs text-slate-500 italic p-2">Tidak ada Team Leader</p>'}
+            ${tls.length > 0 ? tls.map(tl => this.createCardHtml(tl, true)).join('') : '<p class="text-xs text-slate-500 italic p-2">Tidak ada Team Leader</p>'}
           </div>
         </div>
 
-        <!-- DAFTAR AGENT SECTION -->
         <div>
           <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
             <i data-lucide="users" class="w-4 h-4 text-brand-500"></i>
             Daftar Agent (${agents.length})
           </h3>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            ${agents.length > 0 
-              ? agents.map(ag => this.createCardHtml(ag, false)).join('') 
-              : '<p class="text-xs text-slate-500 italic p-2">Tidak ada Agent</p>'}
+            ${agents.length > 0 ? agents.map(ag => this.createCardHtml(ag, false)).join('') : '<p class="text-xs text-slate-500 italic p-2">Tidak ada Agent</p>'}
           </div>
         </div>
       </div>
 
-      <!-- INPUT FILE UNTUK UPLOAD FOTO -->
       <input type="file" id="global-agent-photo-input" accept="image/*" class="hidden" onchange="StructureModule.handlePhotoSelected(event)">
     `;
 
@@ -138,7 +122,7 @@ const StructureModule = {
 
   openModal(id) {
     const key = String(id || '').trim();
-    const person = this.cache[key] || this.cache[key.toLowerCase()];
+    const person = this.cache[key];
     if (!person) return;
 
     this.selectedId = id;
@@ -298,20 +282,10 @@ const StructureModule = {
         if (monthNum >= 1 && monthNum <= 12) return `${day} ${months[monthNum - 1]} ${year}`;
       }
     }
-
-    const parsed = new Date(dateStr);
-    if (!isNaN(parsed.getTime())) {
-      const day = String(parsed.getDate()).padStart(2, '0');
-      const month = months[parsed.getMonth()];
-      const year = parsed.getFullYear();
-      return `${day} ${month} ${year}`;
-    }
-
     return dateStr;
   }
 };
 
-// Aliases Global Window
 window.Agents_uploadPhoto = (id) => StructureModule.triggerPhotoUpload(id);
 window.openDetailModalById = (id) => StructureModule.openModal(id);
 window.openDetailModal = (id) => StructureModule.openModal(id);
