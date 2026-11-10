@@ -1,7 +1,12 @@
 const DatabaseModule = {
   activeSheetTab: 'agents',
+  dataCache: {
+    agents: [],
+    schedule: [],
+    kpi: []
+  },
 
-  render(container) {
+  async render(container) {
     const user = Auth.getUser();
     if (!user || user.role !== 'TL') {
       container.innerHTML = `
@@ -10,7 +15,7 @@ const DatabaseModule = {
             <i data-lucide="lock" class="w-6 h-6"></i>
           </div>
           <h3 class="text-base font-bold text-white">Akses Dibatasi</h3>
-          <p class="text-xs text-slate-400">Modul Database & Data Entry ini khusus untuk akun ber-role <b>Team Leader (TL)</b>.</p>
+          <p class="text-xs text-slate-400">Modul Database Matrix ini khusus untuk akun ber-role <b>Team Leader (TL)</b>.</p>
         </div>
       `;
       if (window.lucide) lucide.createIcons();
@@ -18,36 +23,36 @@ const DatabaseModule = {
     }
 
     container.innerHTML = `
-      <div class="space-y-6">
-        <!-- HEADER SUB-TABS SHEET -->
+      <div class="space-y-5">
+        <!-- HEADER & NAVIGATION TAB SHEET -->
         <div class="glass-panel p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 border border-white/10">
           <div>
             <h3 class="text-sm font-extrabold text-white flex items-center gap-2">
-              <i data-lucide="database" class="w-4 h-4 text-brand-500"></i>
-              Master Database & Data Entry
+              <i data-lucide="table" class="w-4 h-4 text-brand-500"></i>
+              Matrix Database GSheet
             </h3>
-            <p class="text-[11px] text-slate-400">Pilih sheet di sebelah kanan untuk mulai entri / update data</p>
+            <p class="text-[11px] text-slate-400">Tampilan tabel grid data entry realtime dari Google Sheets</p>
           </div>
 
-          <!-- SUB SHEET TABS NAVIGATION -->
-          <div class="flex items-center gap-1.5 bg-slate-900/80 p-1 rounded-xl border border-white/10 overflow-x-auto">
+          <!-- TAB SWITCHER -->
+          <div class="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/10 overflow-x-auto">
             <button onclick="DatabaseModule.switchSheetTab('agents')" id="db-tab-agents" 
-                    class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm">
+                    class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm">
               <i data-lucide="users" class="w-3.5 h-3.5 inline mr-1"></i> Sheet Agent
             </button>
             <button onclick="DatabaseModule.switchSheetTab('schedule')" id="db-tab-schedule" 
-                    class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
+                    class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
               <i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1"></i> Sheet Schedule
             </button>
             <button onclick="DatabaseModule.switchSheetTab('kpi')" id="db-tab-kpi" 
-                    class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
+                    class="px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5">
               <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 inline mr-1"></i> Sheet KPI
             </button>
           </div>
         </div>
 
-        <!-- CONTAINER SHEET ENTRY FORM & TABLE -->
-        <div id="db-sheet-content"></div>
+        <!-- CONTAINER MAIN CONTENT TABLE -->
+        <div id="db-matrix-container"></div>
       </div>
     `;
 
@@ -55,253 +60,278 @@ const DatabaseModule = {
     this.switchSheetTab(this.activeSheetTab);
   },
 
-  switchSheetTab(tab) {
+  async switchSheetTab(tab) {
     this.activeSheetTab = tab;
     ['agents', 'schedule', 'kpi'].forEach(t => {
       const btn = document.getElementById(`db-tab-${t}`);
       if (btn) {
         if (t === tab) {
-          btn.className = "px-3.5 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm";
+          btn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap bg-brand-500 text-white shadow-sm";
         } else {
-          btn.className = "px-3.5 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5";
+          btn.className = "px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:text-white hover:bg-white/5";
         }
       }
     });
 
-    const content = document.getElementById('db-sheet-content');
-    if (!content) return;
+    const container = document.getElementById('db-matrix-container');
+    if (!container) return;
 
-    if (tab === 'agents') this.renderAgentSheet(content);
-    else if (tab === 'schedule') this.renderScheduleSheet(content);
-    else if (tab === 'kpi') this.renderKPISheet(content);
-  },
-
-  // 1. SHEET AGENT ENTRY FORM
-  renderAgentSheet(container) {
     container.innerHTML = `
-      <div class="glass-panel p-6 rounded-3xl space-y-5 border border-white/10">
-        <div class="border-b border-white/10 pb-3 flex items-center justify-between">
-          <h4 class="text-sm font-bold text-white flex items-center gap-2">
-            <i data-lucide="user-plus" class="w-4 h-4 text-brand-500"></i>
-            Entri Data Agent Baru / Update Agent
-          </h4>
-          <span class="text-[10px] text-brand-400 font-semibold px-2.5 py-1 rounded-md bg-brand-500/10 border border-brand-500/20">Sheet: Structure_Data</span>
-        </div>
-
-        <form onsubmit="DatabaseModule.handleAgentSubmit(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Nama Lengkap Agent</label>
-            <input type="text" id="db-agent-nama" required placeholder="Contoh: Budi Santoso" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Role / Jabatan</label>
-            <select id="db-agent-role" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-              <option value="Agent">Agent</option>
-              <option value="TL">Team Leader (TL)</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Vendor / Mitra</label>
-            <input type="text" id="db-agent-vendor" placeholder="Mitracomm / Infomedia / dll" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Batch</label>
-            <input type="text" id="db-agent-batch" placeholder="1 / 2 / 3" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Nama Team Leader (TL)</label>
-            <input type="text" id="db-agent-tl" placeholder="Nama TL Penanggungjawab" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">No Agregator</label>
-            <input type="text" id="db-agent-agg" placeholder="1 / 2 / 3" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Tanggal Lahir</label>
-            <input type="date" id="db-agent-tgl" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Biodata / Keterangan</label>
-            <input type="text" id="db-agent-bio" placeholder="Keterangan singkat..." 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div class="md:col-span-2 pt-2">
-            <div id="db-agent-msg" class="hidden text-xs p-3 rounded-xl mb-3"></div>
-            <button type="submit" id="btn-db-agent-save" 
-                    class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2.5 rounded-xl transition shadow-lg shadow-brand-glow flex items-center justify-center gap-2">
-              <i data-lucide="save" class="w-4 h-4"></i>
-              <span>Simpan Data Ke Sheet Agent</span>
-            </button>
-          </div>
-        </form>
+      <div class="flex flex-col items-center justify-center p-12 text-slate-500 gap-2">
+        <i data-lucide="loader-2" class="w-7 h-7 animate-spin text-brand-500"></i>
+        <p class="text-xs">Memuat tabel data dari Google Sheets...</p>
       </div>
     `;
     if (window.lucide) lucide.createIcons();
+
+    await this.fetchAndRenderMatrix(tab, container);
   },
 
-  // 2. SHEET SCHEDULE ENTRY FORM
-  renderScheduleSheet(container) {
+  async fetchAndRenderMatrix(tab, container) {
+    let actionName = 'getStructure';
+    if (tab === 'schedule') actionName = 'getSchedule';
+    if (tab === 'kpi') actionName = 'getKPI';
+
+    try {
+      const res = await fetch(`${CONFIG.API_URL}?action=${actionName}`);
+      const data = await res.json();
+      
+      let rows = [];
+      if (tab === 'agents') {
+        const obj = data.data || data;
+        const tls = obj.team_leaders || obj.tls || [];
+        const ags = obj.agents || [];
+        rows = Array.isArray(obj) ? obj : [...tls, ...ags];
+      } else {
+        rows = data.data || data.schedule || data.kpi || (Array.isArray(data) ? data : []);
+      }
+
+      this.dataCache[tab] = rows;
+      this.renderTableGrid(tab, rows, container);
+    } catch (err) {
+      container.innerHTML = `
+        <div class="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold">
+          Gagal mengambil data dari Sheet: ${err.message}
+        </div>
+      `;
+    }
+  },
+
+  renderTableGrid(tab, rows, container) {
+    let tableHeader = '';
+    let tableBody = '';
+
+    if (tab === 'agents') {
+      tableHeader = `
+        <tr class="bg-slate-900/90 text-slate-300 border-b border-white/10 text-[11px] font-bold uppercase tracking-wider">
+          <th class="p-3 text-left">Nama Agent</th>
+          <th class="p-3 text-left">Role</th>
+          <th class="p-3 text-left">Vendor</th>
+          <th class="p-3 text-center">Batch</th>
+          <th class="p-3 text-left">Team Leader</th>
+          <th class="p-3 text-center">Aggregator</th>
+          <th class="p-3 text-left">Tgl Lahir</th>
+          <th class="p-3 text-left">Biodata</th>
+        </tr>
+      `;
+      tableBody = rows.length > 0 ? rows.map(r => `
+        <tr class="border-b border-white/5 hover:bg-white/5 transition text-xs">
+          <td class="p-3 font-semibold text-white whitespace-nowrap">${r.nama || r.name || '-'}</td>
+          <td class="p-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20 font-semibold text-[10px]">${r.role || 'Agent'}</span></td>
+          <td class="p-3 text-slate-300 whitespace-nowrap">${r.vendor || r.mitra || '-'}</td>
+          <td class="p-3 text-center text-slate-300">${r.batch || '-'}</td>
+          <td class="p-3 text-slate-300 whitespace-nowrap">${r.tl || r.team_leader || '-'}</td>
+          <td class="p-3 text-center font-bold text-amber-400">${r.aggregator || '-'}</td>
+          <td class="p-3 text-slate-300 whitespace-nowrap">${r.tgl_lahir || r.tanggal_lahir || '-'}</td>
+          <td class="p-3 text-slate-400 max-w-xs truncate">${r.biodata || r.keterangan || '-'}</td>
+        </tr>
+      `).join('') : `<tr><td colspan="8" class="p-4 text-center text-slate-500 italic text-xs">Belum ada data di Sheet Agent.</td></tr>`;
+    } else if (tab === 'schedule') {
+      tableHeader = `
+        <tr class="bg-slate-900/90 text-slate-300 border-b border-white/10 text-[11px] font-bold uppercase tracking-wider">
+          <th class="p-3 text-left">Nama Agent</th>
+          <th class="p-3 text-left">Tanggal</th>
+          <th class="p-3 text-center">Shift</th>
+          <th class="p-3 text-left">Keterangan</th>
+        </tr>
+      `;
+      tableBody = rows.length > 0 ? rows.map(r => `
+        <tr class="border-b border-white/5 hover:bg-white/5 transition text-xs">
+          <td class="p-3 font-semibold text-white whitespace-nowrap">${r.nama || '-'}</td>
+          <td class="p-3 text-slate-300 whitespace-nowrap">${r.tanggal || '-'}</td>
+          <td class="p-3 text-center whitespace-nowrap"><span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[10px]">${r.shift || '-'}</span></td>
+          <td class="p-3 text-slate-400">${r.keterangan || '-'}</td>
+        </tr>
+      `).join('') : `<tr><td colspan="4" class="p-4 text-center text-slate-500 italic text-xs">Belum ada data di Sheet Schedule.</td></tr>`;
+    } else if (tab === 'kpi') {
+      tableHeader = `
+        <tr class="bg-slate-900/90 text-slate-300 border-b border-white/10 text-[11px] font-bold uppercase tracking-wider">
+          <th class="p-3 text-left">Nama Agent</th>
+          <th class="p-3 text-left">Periode</th>
+          <th class="p-3 text-center">Score Quality</th>
+          <th class="p-3 text-center">Score Productivity</th>
+        </tr>
+      `;
+      tableBody = rows.length > 0 ? rows.map(r => `
+        <tr class="border-b border-white/5 hover:bg-white/5 transition text-xs">
+          <td class="p-3 font-semibold text-white whitespace-nowrap">${r.nama || '-'}</td>
+          <td class="p-3 text-slate-300 whitespace-nowrap">${r.periode || '-'}</td>
+          <td class="p-3 text-center font-bold text-emerald-400">${r.quality || r.score_quality || '-'}%</td>
+          <td class="p-3 text-center font-bold text-brand-400">${r.productivity || r.score_productivity || '-'}</td>
+        </tr>
+      `).join('') : `<tr><td colspan="4" class="p-4 text-center text-slate-500 italic text-xs">Belum ada data di Sheet KPI.</td></tr>`;
+    }
+
     container.innerHTML = `
-      <div class="glass-panel p-6 rounded-3xl space-y-5 border border-white/10">
-        <div class="border-b border-white/10 pb-3 flex items-center justify-between">
-          <h4 class="text-sm font-bold text-white flex items-center gap-2">
-            <i data-lucide="calendar-plus" class="w-4 h-4 text-brand-500"></i>
-            Entri Jadwal Shift Agent
-          </h4>
-          <span class="text-[10px] text-brand-400 font-semibold px-2.5 py-1 rounded-md bg-brand-500/10 border border-brand-500/20">Sheet: Schedule_Data</span>
+      <div class="glass-panel rounded-3xl overflow-hidden border border-white/10 space-y-4 p-4">
+        <!-- TOP TOOLBAR TABEL & BUTTON TAMBAH -->
+        <div class="flex items-center justify-between gap-3 pb-2 border-b border-white/10">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-300">Total Baris:</span>
+            <span class="px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold border border-brand-500/30">${rows.length}</span>
+          </div>
+
+          <button onclick="DatabaseModule.openAddRowModal('${tab}')" class="px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-brand-glow flex items-center gap-1.5">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>+ Tambah Baris Baru</span>
+          </button>
         </div>
 
-        <form onsubmit="DatabaseModule.handleScheduleSubmit(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Nama Agent</label>
-            <input type="text" id="db-sch-nama" required placeholder="Nama Agent" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Tanggal</label>
-            <input type="date" id="db-sch-tgl" required 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Status Shift / OFF</label>
-            <select id="db-sch-shift" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-              <option value="Morning">Morning (Pagi)</option>
-              <option value="Middle">Middle (Siang)</option>
-              <option value="Night">Night (Malam)</option>
-              <option value="OFF">OFF (Libur)</option>
-              <option value="Cuti">Cuti</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Keterangan Tambahan</label>
-            <input type="text" id="db-sch-ket" placeholder="Catatan opsional..." 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
-
-          <div class="md:col-span-2 pt-2">
-            <div id="db-sch-msg" class="hidden text-xs p-3 rounded-xl mb-3"></div>
-            <button type="submit" id="btn-db-sch-save" 
-                    class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2.5 rounded-xl transition shadow-lg shadow-brand-glow flex items-center justify-center gap-2">
-              <i data-lucide="save" class="w-4 h-4"></i>
-              <span>Simpan Jadwal Ke Sheet Schedule</span>
-            </button>
-          </div>
-        </form>
+        <!-- MATRIX SPREADSHEET TABLE GRID (SCROLLABLE HP) -->
+        <div class="overflow-x-auto rounded-xl border border-white/10 max-h-[500px]">
+          <table class="w-full text-left border-collapse">
+            <thead>${tableHeader}</thead>
+            <tbody>${tableBody}</tbody>
+          </table>
+        </div>
       </div>
     `;
+
     if (window.lucide) lucide.createIcons();
   },
 
-  // 3. SHEET KPI ENTRY FORM
-  renderKPISheet(container) {
-    container.innerHTML = `
-      <div class="glass-panel p-6 rounded-3xl space-y-5 border border-white/10">
-        <div class="border-b border-white/10 pb-3 flex items-center justify-between">
-          <h4 class="text-sm font-bold text-white flex items-center gap-2">
-            <i data-lucide="bar-chart-2" class="w-4 h-4 text-brand-500"></i>
-            Entri Nilai KPI Performance
-          </h4>
-          <span class="text-[10px] text-brand-400 font-semibold px-2.5 py-1 rounded-md bg-brand-500/10 border border-brand-500/20">Sheet: KPI_Data</span>
+  // MODAL INPUT DATA BARU SESUAI SHEET TAB
+  openAddRowModal(tab) {
+    let modal = document.getElementById('db-add-row-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'db-add-row-modal';
+      modal.className = 'fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4';
+      document.body.appendChild(modal);
+    }
+
+    let formFields = '';
+    let title = '';
+
+    if (tab === 'agents') {
+      title = 'Tambah Baris Baru (Sheet Agent)';
+      formFields = `
+        <div class="space-y-3 text-xs">
+          <div><label class="block font-semibold mb-1">Nama Agent</label><input type="text" id="add-ag-nama" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          <div><label class="block font-semibold mb-1">Role</label><select id="add-ag-role" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"><option value="Agent">Agent</option><option value="TL">Team Leader</option></select></div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="block font-semibold mb-1">Vendor</label><input type="text" id="add-ag-vendor" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+            <div><label class="block font-semibold mb-1">Batch</label><input type="text" id="add-ag-batch" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="block font-semibold mb-1">Team Leader</label><input type="text" id="add-ag-tl" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+            <div><label class="block font-semibold mb-1">Aggregator</label><input type="text" id="add-ag-agg" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          </div>
+          <div><label class="block font-semibold mb-1">Tanggal Lahir</label><input type="date" id="add-ag-tgl" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          <div><label class="block font-semibold mb-1">Biodata / Ket</label><input type="text" id="add-ag-bio" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
         </div>
-
-        <form onsubmit="DatabaseModule.handleKPISubmit(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Nama Agent</label>
-            <input type="text" id="db-kpi-nama" required placeholder="Nama Agent" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
+      `;
+    } else if (tab === 'schedule') {
+      title = 'Tambah Baris Baru (Sheet Schedule)';
+      formFields = `
+        <div class="space-y-3 text-xs">
+          <div><label class="block font-semibold mb-1">Nama Agent</label><input type="text" id="add-sch-nama" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          <div><label class="block font-semibold mb-1">Tanggal</label><input type="date" id="add-sch-tgl" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          <div><label class="block font-semibold mb-1">Shift</label><select id="add-sch-shift" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"><option value="Morning">Morning</option><option value="Middle">Middle</option><option value="Night">Night</option><option value="OFF">OFF</option></select></div>
+          <div><label class="block font-semibold mb-1">Keterangan</label><input type="text" id="add-sch-ket" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+        </div>
+      `;
+    } else if (tab === 'kpi') {
+      title = 'Tambah Baris Baru (Sheet KPI)';
+      formFields = `
+        <div class="space-y-3 text-xs">
+          <div><label class="block font-semibold mb-1">Nama Agent</label><input type="text" id="add-kpi-nama" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          <div><label class="block font-semibold mb-1">Periode</label><input type="month" id="add-kpi-periode" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="block font-semibold mb-1">Score Quality (%)</label><input type="number" step="0.01" id="add-kpi-quality" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
+            <div><label class="block font-semibold mb-1">Score Productivity</label><input type="number" step="0.01" id="add-kpi-prod" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"></div>
           </div>
+        </div>
+      `;
+    }
 
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Bulan / Periode</label>
-            <input type="month" id="db-kpi-periode" required 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
+    modal.innerHTML = `
+      <div class="glass-panel border border-white/10 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+        <button onclick="document.getElementById('db-add-row-modal').classList.add('hidden')" class="absolute top-5 right-5 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
 
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Score Quality (%)</label>
-            <input type="number" step="0.01" id="db-kpi-quality" placeholder="100" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
+        <h3 class="text-sm font-bold text-white border-b border-white/10 pb-2 flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-brand-500"></i>
+          ${title}
+        </h3>
 
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Score Productivity / Handling</label>
-            <input type="number" step="0.01" id="db-kpi-prod" placeholder="95" 
-                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
-          </div>
+        <form onsubmit="DatabaseModule.saveRowData(event, '${tab}')" class="space-y-4">
+          ${formFields}
 
-          <div class="md:col-span-2 pt-2">
-            <div id="db-kpi-msg" class="hidden text-xs p-3 rounded-xl mb-3"></div>
-            <button type="submit" id="btn-db-kpi-save" 
-                    class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2.5 rounded-xl transition shadow-lg shadow-brand-glow flex items-center justify-center gap-2">
-              <i data-lucide="save" class="w-4 h-4"></i>
-              <span>Simpan Data Ke Sheet KPI</span>
-            </button>
-          </div>
+          <div id="add-row-msg" class="hidden text-xs p-3 rounded-xl"></div>
+
+          <button type="submit" id="btn-save-row" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-brand-glow">
+            Simpan Baris Baru Ke GSheet
+          </button>
         </form>
       </div>
     `;
+
+    modal.classList.remove('hidden');
     if (window.lucide) lucide.createIcons();
   },
 
-  // SUBMIT HANDLERS
-  async handleAgentSubmit(e) {
+  async saveRowData(e, tab) {
     e.preventDefault();
-    this.sendData('saveAgent', {
-      nama: document.getElementById('db-agent-nama').value,
-      role: document.getElementById('db-agent-role').value,
-      vendor: document.getElementById('db-agent-vendor').value,
-      batch: document.getElementById('db-agent-batch').value,
-      tl: document.getElementById('db-agent-tl').value,
-      aggregator: document.getElementById('db-agent-agg').value,
-      tgl_lahir: document.getElementById('db-agent-tgl').value,
-      biodata: document.getElementById('db-agent-bio').value
-    }, 'db-agent-msg', 'btn-db-agent-save');
-  },
+    const msg = document.getElementById('add-row-msg');
+    const btn = document.getElementById('btn-save-row');
 
-  async handleScheduleSubmit(e) {
-    e.preventDefault();
-    this.sendData('saveSchedule', {
-      nama: document.getElementById('db-sch-nama').value,
-      tanggal: document.getElementById('db-sch-tgl').value,
-      shift: document.getElementById('db-sch-shift').value,
-      keterangan: document.getElementById('db-sch-ket').value
-    }, 'db-sch-msg', 'btn-db-sch-save');
-  },
-
-  async handleKPISubmit(e) {
-    e.preventDefault();
-    this.sendData('saveKPI', {
-      nama: document.getElementById('db-kpi-nama').value,
-      periode: document.getElementById('db-kpi-periode').value,
-      quality: document.getElementById('db-kpi-quality').value,
-      productivity: document.getElementById('db-kpi-prod').value
-    }, 'db-kpi-msg', 'btn-db-kpi-save');
-  },
-
-  async sendData(action, payload, msgId, btnId) {
-    const msg = document.getElementById(msgId);
-    const btn = document.getElementById(btnId);
-    const oldBtnText = btn.innerHTML;
-
-    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin inline mr-1"></i> Menyimpan...`;
+    btn.innerText = "Menyimpan Ke Sheet...";
     btn.disabled = true;
+
+    let action = 'saveAgent';
+    let payload = {};
+
+    if (tab === 'agents') {
+      action = 'saveAgent';
+      payload = {
+        nama: document.getElementById('add-ag-nama').value,
+        role: document.getElementById('add-ag-role').value,
+        vendor: document.getElementById('add-ag-vendor').value,
+        batch: document.getElementById('add-ag-batch').value,
+        tl: document.getElementById('add-ag-tl').value,
+        aggregator: document.getElementById('add-ag-agg').value,
+        tgl_lahir: document.getElementById('add-ag-tgl').value,
+        biodata: document.getElementById('add-ag-bio').value
+      };
+    } else if (tab === 'schedule') {
+      action = 'saveSchedule';
+      payload = {
+        nama: document.getElementById('add-sch-nama').value,
+        tanggal: document.getElementById('add-sch-tgl').value,
+        shift: document.getElementById('add-sch-shift').value,
+        keterangan: document.getElementById('add-sch-ket').value
+      };
+    } else if (tab === 'kpi') {
+      action = 'saveKPI';
+      payload = {
+        nama: document.getElementById('add-kpi-nama').value,
+        periode: document.getElementById('add-kpi-periode').value,
+        quality: document.getElementById('add-kpi-quality').value,
+        productivity: document.getElementById('add-kpi-prod').value
+      };
+    }
 
     try {
       const res = await fetch(CONFIG.API_URL, {
@@ -313,19 +343,23 @@ const DatabaseModule = {
       const data = await res.json();
       if (data && (data.status === 'success' || data.result === 'success')) {
         msg.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-        msg.innerText = "✅ Data berhasil disimpan langsung ke Google Sheet!";
+        msg.innerText = "✅ Baris data baru berhasil disimpan!";
         msg.classList.remove('hidden');
+
+        setTimeout(() => {
+          document.getElementById('db-add-row-modal').classList.add('hidden');
+          this.switchSheetTab(tab);
+        }, 1200);
       } else {
         throw new Error((data && data.message) || 'Gagal menyimpan data.');
       }
     } catch (err) {
       msg.className = "text-xs p-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
-      msg.innerText = "❌ Status: " + err.message;
+      msg.innerText = "❌ Error: " + err.message;
       msg.classList.remove('hidden');
     } finally {
-      btn.innerHTML = oldBtnText;
+      btn.innerText = "Simpan Baris Baru Ke GSheet";
       btn.disabled = false;
-      if (window.lucide) lucide.createIcons();
     }
   }
 };
