@@ -1,4 +1,4 @@
-// HELPER FORMAT TANGGAL INDONESIA (Contoh: 1990-10-03 -> 03 Oktober 1990)
+// HELPER FORMAT TANGGAL INDONESIA (1990-10-03 -> 03 Oktober 1990)
 function formatDateIndo(dateStr) {
   if (!dateStr || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') return '-';
   const cleanStr = String(dateStr).trim().split('T')[0];
@@ -18,7 +18,6 @@ function formatDateIndo(dateStr) {
   return dateStr;
 }
 
-// CACHE MAP GLOBAL UNTUK MENGHINDARI ERROR SINTAKS QUOTE PADA ONCLICK
 window.agentCacheMap = {};
 window.selectedAgentForPhoto = null;
 
@@ -66,7 +65,7 @@ window.handlePhotoSelected = async function(event) {
       });
 
       const data = await res.json();
-      if (data.status === 'success' || data.photo_url) {
+      if (data && (data.status === 'success' || data.photo_url)) {
         if (statusMsg) {
           statusMsg.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
           statusMsg.innerText = "Foto berhasil diperbarui!";
@@ -96,7 +95,8 @@ window.openDetailModalById = function(id) {
   window.selectedAgentForPhoto = id;
   const formattedTgl = formatDateIndo(person.tgl_lahir || person.tanggal_lahir);
   const photo = person.photo || person.foto || 'https://via.placeholder.com/150';
-  const role = person.role === 'TL' || person.is_tl ? 'Team Leader' : 'Agent';
+  const isTL = person.role === 'TL' || person.is_tl || String(person.role).toUpperCase().includes('LEADER');
+  const role = isTL ? 'Team Leader' : 'Agent';
   const agg = person.aggregator ? `Agregator ${person.aggregator}` : 'Agregator -';
   const nama = person.nama || person.name || '-';
   const batch = person.batch || '-';
@@ -175,30 +175,32 @@ const StructureModule = {
     try {
       const res = await fetch(`${CONFIG.API_URL}?action=getStructure`);
       const data = await res.json();
-
-      if (data && (data.status === 'success' || data.team_leaders || data.agents || Array.isArray(data))) {
-        this.renderData(container, data);
-      } else {
-        container.innerHTML = `<div class="text-red-400 p-4 font-semibold">Gagal memuat data struktur: format data API tidak sesuai.</div>`;
-      }
+      this.renderData(container, data);
     } catch (err) {
       container.innerHTML = `<div class="text-red-400 p-4 font-semibold">Error koneksi: ${err.message}</div>`;
     }
   },
 
   renderData(container, data) {
-    const tls = data.team_leaders || data.tls || [];
-    const agents = data.agents || [];
+    let raw = data ? (data.data || data.structure || data) : [];
+    let tls = [];
+    let agents = [];
+
+    if (Array.isArray(raw)) {
+      tls = raw.filter(item => item.role === 'TL' || item.is_tl || String(item.role).toUpperCase().includes('LEADER'));
+      agents = raw.filter(item => !(item.role === 'TL' || item.is_tl || String(item.role).toUpperCase().includes('LEADER')));
+    } else if (typeof raw === 'object' && raw !== null) {
+      tls = raw.team_leaders || raw.tls || [];
+      agents = raw.agents || [];
+    }
 
     window.agentCacheMap = {};
-    tls.forEach(item => {
+    const registerCache = (item) => {
       const id = item.id || item.agent_id || item.nama;
-      window.agentCacheMap[id] = item;
-    });
-    agents.forEach(item => {
-      const id = item.id || item.agent_id || item.nama;
-      window.agentCacheMap[id] = item;
-    });
+      if (id) window.agentCacheMap[id] = item;
+    };
+    tls.forEach(registerCache);
+    agents.forEach(registerCache);
 
     let html = `
       <div class="space-y-6">
@@ -239,14 +241,14 @@ const StructureModule = {
     return `
       <div class="glass-panel rounded-2xl p-4 flex items-center gap-4 hover:border-brand-500/40 transition group">
         <div class="relative shrink-0">
-          <img src="${photoUrl}" alt="${person.nama}" class="w-14 h-14 rounded-2xl object-cover border border-white/10 shadow-md">
+          <img src="${photoUrl}" alt="${person.nama || ''}" class="w-14 h-14 rounded-2xl object-cover border border-white/10 shadow-md">
           <span class="w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full absolute -bottom-1 -right-1"></span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 mb-1">
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20 truncate">${aggText}</span>
           </div>
-          <h4 class="text-sm font-bold text-white light:text-slate-900 truncate">${person.nama || person.name}</h4>
+          <h4 class="text-sm font-bold text-white light:text-slate-900 truncate">${person.nama || person.name || '-'}</h4>
           <p class="text-xs text-slate-400 truncate">${person.vendor || '-'} • ${roleBadge}</p>
         </div>
         <button onclick="window.openDetailModalById('${id}')" 
