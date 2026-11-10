@@ -335,7 +335,7 @@ StructureModule.handlePhotoUpload = async function (event, agentId) {
     const base64Data = await StructureModule.compressImage(file, 350);
 
     setStatus('info', 'Mengunggah foto baru...');
-    const payload = { action: 'uploadPhoto', agent_id: agentId, image: base64Data };
+    const payload = { action: 'uploadPhoto', agentId: agentId, base64Data: base64Data };
     const body = window.STRUCT_UPLOAD_MODE === 'json'
       ? JSON.stringify(payload)
       : new URLSearchParams(payload);
