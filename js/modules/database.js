@@ -3,7 +3,6 @@ const DatabaseModule = {
   activeSheet: '',
   headers: [],
   rows: [],
-  isSaving: false,
 
   async render(container) {
     const user = Auth.getUser();
@@ -23,40 +22,30 @@ const DatabaseModule = {
 
     container.innerHTML = `
       <div class="space-y-4">
-        <!-- HEADER & DYNAMIC TABS BAR -->
+        <!-- HEADER & TABS BAR -->
         <div class="glass-panel p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 border border-white/10">
-          <div class="flex items-center gap-3">
-            <div>
-              <h3 class="text-sm font-extrabold text-white flex items-center gap-2">
-                <i data-lucide="database" class="w-4 h-4 text-brand-500"></i>
-                Matrix Database GSheet
-              </h3>
-              <p class="text-[11px] text-slate-400">Tabel interaktif & sync otomatis per sel</p>
-            </div>
-            <!-- STATUS INDIKATOR AUTO-SAVE -->
-            <div id="db-sync-indicator" class="hidden items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-900 border border-white/10">
-              <span id="db-sync-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span id="db-sync-text" class="text-slate-300">Tersimpan</span>
-            </div>
+          <div>
+            <h3 class="text-sm font-extrabold text-white flex items-center gap-2">
+              <i data-lucide="database" class="w-4 h-4 text-brand-500"></i>
+              Matrix Database GSheet
+            </h3>
+            <p class="text-[11px] text-slate-400">Kelola akun login (Users) & data master langsung dari tabel</p>
           </div>
 
-          <!-- CONTAINER TAB SHEET DINAMIS -->
           <div id="db-tabs-wrapper" class="flex items-center gap-1.5 bg-slate-900/80 p-1 rounded-xl border border-white/10 overflow-x-auto">
             <span class="text-xs text-slate-500 px-2">Memuat sheet...</span>
           </div>
         </div>
 
-        <!-- MAIN TABLE CONTAINER -->
         <div id="db-matrix-content"></div>
       </div>
     `;
 
     if (window.lucide) lucide.createIcons();
-    await this.loadSheetsWhitelist(container);
+    await this.loadSheetsWhitelist();
   },
 
-  // 1. FETCH DAFTAR SHEET WHITELIST DARI BACKEND
-  async loadSheetsWhitelist(container) {
+  async loadSheetsWhitelist() {
     const user = Auth.getUser();
     const tabsWrapper = document.getElementById('db-tabs-wrapper');
 
@@ -85,7 +74,6 @@ const DatabaseModule = {
     }
   },
 
-  // 2. SWITCH TAB SHEET
   async switchSheet(sheetName) {
     if (this.activeSheet === sheetName) return;
     this.activeSheet = sheetName;
@@ -102,7 +90,6 @@ const DatabaseModule = {
     await this.loadSheetContent(sheetName);
   },
 
-  // 3. FETCH DATA ISI SHEET
   async loadSheetContent(sheetName) {
     const user = Auth.getUser();
     const mainContent = document.getElementById('db-matrix-content');
@@ -110,7 +97,7 @@ const DatabaseModule = {
     mainContent.innerHTML = `
       <div class="flex flex-col items-center justify-center p-12 text-slate-500 gap-2">
         <i data-lucide="loader-2" class="w-7 h-7 animate-spin text-brand-500"></i>
-        <p class="text-xs">Memuat lembar kerja "${sheetName}"...</p>
+        <p class="text-xs">Memuat data sheet "${sheetName}"...</p>
       </div>
     `;
     if (window.lucide) lucide.createIcons();
@@ -135,10 +122,9 @@ const DatabaseModule = {
     }
   },
 
-  // 4. RENDER MATRIX SPREADSHEET TABLE
   renderSpreadsheetTable(container) {
     if (this.headers.length === 0) {
-      container.innerHTML = `<div class="p-4 text-slate-500 text-xs italic">Sheet ini masih kosong (belum ada kolom header).</div>`;
+      container.innerHTML = `<div class="p-4 text-slate-500 text-xs italic">Sheet ini belum memiliki kolom header.</div>`;
       return;
     }
 
@@ -150,54 +136,64 @@ const DatabaseModule = {
     `;
 
     let rowsHtml = this.rows.map((row, idx) => `
-      <tr class="border-b border-white/5 hover:bg-slate-900/40 transition text-xs">
+      <tr class="db-existing-row border-b border-white/5 hover:bg-slate-900/40 transition text-xs" data-row-index="${row._rowIndex}">
         <td class="p-2 text-center text-slate-500 font-mono font-bold bg-slate-900/30 border-r border-white/5">${row._rowIndex || (idx + 2)}</td>
         ${this.headers.map(h => `
           <td class="p-1 border-r border-white/5 last:border-r-0">
             <input type="text" 
+                   data-header="${this.escapeHtml(h)}"
                    value="${this.escapeHtml(row[h] !== undefined ? row[h] : '')}"
-                   onblur="DatabaseModule.handleCellBlur(this, ${row._rowIndex || (idx + 2)}, '${this.escapeHtml(h)}')"
-                   class="w-full bg-transparent px-2 py-1.5 text-slate-200 focus:text-white focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded transition" 
+                   class="cell-edit-input w-full bg-transparent px-2 py-1.5 text-slate-200 focus:text-white focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded transition" 
                    placeholder="-">
           </td>
         `).join('')}
       </tr>
     `).join('');
 
-    // BARIS KOSONG PALING BAWAH (UNTUK APPEND BARIS BARU)
-    let emptyRowHtml = `
-      <tr id="db-empty-append-row" class="border-b-2 border-dashed border-brand-500/30 bg-brand-500/5 hover:bg-brand-500/10 transition text-xs">
-        <td class="p-2 text-center text-brand-400 font-mono font-bold border-r border-white/5">+</td>
-        ${this.headers.map(h => `
-          <td class="p-1 border-r border-white/5 last:border-r-0">
-            <input type="text" 
-                   data-header="${this.escapeHtml(h)}"
-                   onblur="DatabaseModule.checkAppendRowBlur()"
-                   class="cell-append-input w-full bg-transparent px-2 py-1.5 text-brand-300 placeholder-brand-500/40 focus:text-white focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded transition" 
-                   placeholder="Ketik baris baru...">
-          </td>
-        `).join('')}
-      </tr>
-    `;
-
     container.innerHTML = `
-      <div class="glass-panel p-4 rounded-3xl border border-white/10 space-y-3">
-        <div class="flex items-center justify-between text-xs px-1">
-          <div class="flex items-center gap-2">
-            <span class="text-slate-400 font-semibold">Total Baris:</span>
-            <span id="db-total-rows-count" class="px-2 py-0.5 rounded-md bg-brand-500/20 text-brand-400 font-bold border border-brand-500/30">${this.rows.length}</span>
+      <div class="glass-panel p-4 rounded-3xl border border-white/10 space-y-4">
+        <!-- TOP TOOLBAR STATUS & SAVE BUTTON -->
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-white/10">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-slate-400 font-semibold">Total Baris Terdaftar:</span>
+            <span id="db-total-count" class="px-2 py-0.5 rounded-md bg-brand-500/20 text-brand-400 font-bold border border-brand-500/30">${this.rows.length}</span>
           </div>
-          <span class="text-[11px] text-amber-400 font-medium italic">💡 Ketik & klik luar sel untuk auto-save. Ketik di baris paling bawah (+) untuk tambah data baru.</span>
+
+          <button onclick="DatabaseModule.saveAllData()" id="btn-top-save" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition shadow-lg shadow-emerald-600/20 flex items-center gap-2">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            <span>Simpan Perubahan & Baris Baru</span>
+          </button>
         </div>
 
-        <div class="overflow-x-auto rounded-2xl border border-white/10 max-h-[550px]">
+        <div id="db-status-banner" class="hidden text-xs p-3 rounded-xl"></div>
+
+        <!-- MATRIX SPREADSHEET TABLE -->
+        <div class="overflow-x-auto rounded-2xl border border-white/10 max-h-[480px]">
           <table class="w-full text-left border-collapse">
             <thead>${headerHtml}</thead>
             <tbody id="db-table-body">
               ${rowsHtml}
-              ${emptyRowHtml}
             </tbody>
           </table>
+        </div>
+
+        <!-- BOTTOM CONTROLS: ADD ROWS & BOTTOM SAVE BUTTON -->
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+          <div class="flex items-center gap-2">
+            <button onclick="DatabaseModule.addEmptyRows(1)" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl border border-white/10 transition flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-4 h-4 text-emerald-400"></i>
+              <span>+ 1 Baris Kosong</span>
+            </button>
+            <button onclick="DatabaseModule.addEmptyRows(5)" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold rounded-xl border border-white/10 transition flex items-center gap-1.5">
+              <i data-lucide="plus-circle" class="w-4 h-4 text-amber-400"></i>
+              <span>+ 5 Baris Kosong</span>
+            </button>
+          </div>
+
+          <button onclick="DatabaseModule.saveAllData()" id="btn-bottom-save" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition shadow-lg shadow-emerald-600/20 flex items-center gap-2">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            <span>Simpan Perubahan</span>
+          </button>
         </div>
       </div>
     `;
@@ -205,112 +201,103 @@ const DatabaseModule = {
     if (window.lucide) lucide.createIcons();
   },
 
-  // 5. EVENT AUTO-SAVE PER SEL
-  async handleCellBlur(inputEl, rowIndex, colHeader) {
-    const newValue = inputEl.value;
-    const user = Auth.getUser();
+  // TAMBAH BARIS KOSONG KE DALAM TABEL (1 ATAU 5 BARIS)
+  addEmptyRows(count = 1) {
+    const tbody = document.getElementById('db-table-body');
+    if (!tbody) return;
 
-    this.showSyncStatus('saving', 'Menyimpan sel...');
-
-    try {
-      const res = await fetch(CONFIG.API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          action: 'saveCell',
-          username: user.username,
-          sheetName: this.activeSheet,
-          rowIndex: rowIndex,
-          colHeader: colHeader,
-          value: newValue
-        })
-      });
-
-      const data = await res.json();
-      if (data.status === 'success') {
-        this.showSyncStatus('saved', '✓ Tersimpan');
-      } else {
-        throw new Error(data.message || 'Gagal menyimpan sel');
-      }
-    } catch (err) {
-      this.showSyncStatus('error', '❌ ' + err.message);
+    const existingCount = tbody.querySelectorAll('tr').length;
+    for (let c = 0; c < count; c++) {
+      const rowNum = existingCount + c + 1;
+      const tr = document.createElement('tr');
+      tr.className = "db-new-append-row border-b-2 border-dashed border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 transition text-xs";
+      tr.innerHTML = `
+        <td class="p-2 text-center text-emerald-400 font-mono font-bold border-r border-white/5">+${c + 1}</td>
+        ${this.headers.map(h => `
+          <td class="p-1 border-r border-white/5 last:border-r-0">
+            <input type="text" 
+                   data-header="${this.escapeHtml(h)}"
+                   class="cell-new-input w-full bg-transparent px-2 py-1.5 text-emerald-300 placeholder-emerald-500/40 focus:text-white focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded transition" 
+                   placeholder="Isi data...">
+          </td>
+        `).join('')}
+      `;
+      tbody.appendChild(tr);
     }
+
+    if (window.lucide) lucide.createIcons();
+    
+    // Auto scroll ke paling bawah tabel agar baris baru langsung kelihatan
+    const scrollContainer = tbody.closest('.overflow-x-auto');
+    if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
   },
 
-  // 6. EVENT AUTO-APPEND BARIS BARU DARI BARIS KOSONG
-  async checkAppendRowBlur() {
-    const inputs = document.querySelectorAll('.cell-append-input');
-    const rowData = {};
-    let hasValue = false;
-
-    inputs.forEach(inp => {
-      const header = inp.getAttribute('data-header');
-      const val = inp.value.trim();
-      if (val) {
-        hasValue = true;
-        rowData[header] = val;
-      }
-    });
-
-    if (!hasValue || this.isSaving) return;
-
-    this.isSaving = true;
+  // EKSEKUSI TOMBOL "SIMPAN PERUBAHAN"
+  async saveAllData() {
     const user = Auth.getUser();
-    this.showSyncStatus('saving', 'Membuat baris baru...');
+    const banner = document.getElementById('db-status-banner');
+    const btnTop = document.getElementById('btn-top-save');
+    const btnBottom = document.getElementById('btn-bottom-save');
+
+    banner.className = "text-xs p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20";
+    banner.innerText = "⏳ Menyimpan perubahan dan baris baru ke Google Sheet...";
+    banner.classList.remove('hidden');
+
+    if (btnTop) btnTop.disabled = true;
+    if (btnBottom) btnBottom.disabled = true;
 
     try {
-      const res = await fetch(CONFIG.API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          action: 'appendRow',
-          username: user.username,
-          sheetName: this.activeSheet,
-          rowData: JSON.stringify(rowData)
-        })
+      // 1. KUMPULKAN BARIS BARU DARI INPUT BARIS KOSONG
+      const newRowEls = document.querySelectorAll('.db-new-append-row');
+      const newRowsData = [];
+
+      newRowEls.forEach(row => {
+        const rowObj = {};
+        let hasContent = false;
+        row.querySelectorAll('.cell-new-input').forEach(inp => {
+          const h = inp.getAttribute('data-header');
+          const val = inp.value.trim();
+          if (val) {
+            hasContent = true;
+            rowObj[h] = val;
+          }
+        });
+        if (hasContent) newRowsData.push(rowObj);
       });
 
-      const data = await res.json();
-      if (data.status === 'success') {
-        this.showSyncStatus('saved', '✓ Baris Baru Dibuat');
-        // Refresh isi tabel agar baris baru berubah jadi baris aktif ber-ID
-        await this.loadSheetContent(this.activeSheet);
-      } else {
-        throw new Error(data.message || 'Gagal menambah baris');
+      // 2. JIKA ADA BARIS BARU, KIRIM APPEND REQUEST
+      if (newRowsData.length > 0) {
+        const resAppend = await fetch(CONFIG.API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            action: 'appendRow',
+            username: user.username,
+            sheetName: this.activeSheet,
+            rowData: JSON.stringify(newRowsData)
+          })
+        });
+        const dataAppend = await resAppend.json();
+        if (dataAppend.status !== 'success') {
+          throw new Error(dataAppend.message || 'Gagal menyimpan baris baru.');
+        }
       }
-    } catch (err) {
-      this.showSyncStatus('error', '❌ ' + err.message);
-    } finally {
-      this.isSaving = false;
-    }
-  },
 
-  // HELPER INDIKATOR STATUS AUTO-SAVE
-  showSyncStatus(type, text) {
-    const indicator = document.getElementById('db-sync-indicator');
-    const dot = document.getElementById('db-sync-dot');
-    const label = document.getElementById('db-sync-text');
+      banner.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+      banner.innerText = `✅ Berhasil menyimpan perubahan ke Sheet "${this.activeSheet}"! Reloading data...`;
 
-    if (!indicator || !dot || !label) return;
-
-    indicator.classList.remove('hidden');
-    indicator.classList.add('flex');
-
-    if (type === 'saving') {
-      dot.className = "w-2 h-2 rounded-full bg-amber-400 animate-ping";
-      label.className = "text-amber-400 font-semibold";
-    } else if (type === 'saved') {
-      dot.className = "w-2 h-2 rounded-full bg-emerald-400";
-      label.className = "text-emerald-400 font-semibold";
+      // 3. REFRESH ISI SHEET AGAR BARIS BARU MENJADI BARIS RESMI
       setTimeout(() => {
-        indicator.classList.add('hidden');
-        indicator.classList.remove('flex');
-      }, 2500);
-    } else if (type === 'error') {
-      dot.className = "w-2 h-2 rounded-full bg-red-400";
-      label.className = "text-red-400 font-semibold";
+        this.loadSheetContent(this.activeSheet);
+      }, 1200);
+
+    } catch (err) {
+      banner.className = "text-xs p-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
+      banner.innerText = "❌ Error Simpan: " + err.message;
+    } finally {
+      if (btnTop) btnTop.disabled = false;
+      if (btnBottom) btnBottom.disabled = false;
     }
-    label.innerText = text;
   },
 
   escapeHtml(str) {
