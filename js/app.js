@@ -76,7 +76,15 @@ function checkAuthSession() {
   const user = Auth.getUser();
   const overlay = document.getElementById("login-overlay");
   const authContainer = document.getElementById("sidebar-auth-container");
-  
+  const dbNavBtn = document.getElementById("nav-database");
+
+  // PENGECEKAN HAK AKSES KHUSUS ROLE TL
+  if (user && user.role === 'TL') {
+    if (dbNavBtn) dbNavBtn.classList.remove("hidden");
+  } else {
+    if (dbNavBtn) dbNavBtn.classList.add("hidden");
+  }
+
   if (!user) {
     if (overlay) overlay.classList.remove("hidden");
     showAuthScreen('login');
@@ -226,7 +234,7 @@ function switchTab(tabName) {
   const contentArea = document.getElementById("app-content");
   const pageTitle = document.getElementById("page-title");
   
-  ["structure", "schedule", "kpi"].forEach(tab => {
+  ["structure", "schedule", "kpi", "database"].forEach(tab => {
     const navBtn = document.getElementById(`nav-${tab}`);
     if (navBtn) {
       if (tab === tabName) {
@@ -248,20 +256,6 @@ function switchTab(tabName) {
         <div class="h-16 bg-slate-900/60 rounded-2xl border border-white/5 relative overflow-hidden">
           <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer"></div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div class="h-24 bg-slate-900/60 rounded-2xl border border-white/5 relative overflow-hidden">
-            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer"></div>
-          </div>
-          <div class="h-24 bg-slate-900/60 rounded-2xl border border-white/5 relative overflow-hidden">
-            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer"></div>
-          </div>
-          <div class="h-24 bg-slate-900/60 rounded-2xl border border-white/5 relative overflow-hidden">
-            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer"></div>
-          </div>
-          <div class="h-24 bg-slate-900/60 rounded-2xl border border-white/5 relative overflow-hidden">
-            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer"></div>
-          </div>
-        </div>
         <div class="h-64 bg-slate-900/60 rounded-2xl border border-white/5 relative overflow-hidden">
           <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer"></div>
         </div>
@@ -277,6 +271,9 @@ function switchTab(tabName) {
     } else if (tabName === "kpi" && typeof KPIModule !== 'undefined') {
       if (pageTitle) pageTitle.innerText = "KPI Performance";
       KPIModule.render(contentArea);
+    } else if (tabName === "database" && typeof DatabaseModule !== 'undefined') {
+      if (pageTitle) pageTitle.innerText = "Database & Data Entry (TL)";
+      DatabaseModule.render(contentArea);
     }
 
     contentArea.classList.remove("page-exit");
