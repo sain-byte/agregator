@@ -272,7 +272,7 @@ const StructureModule = {
 
 // ===== PATCH UPLOAD FOTO =====
 // 'form' = form-urlencoded (e.parameter di GAS) | 'json' = JSON string (JSON.parse(e.postData.contents))
-window.STRUCT_UPLOAD_MODE = 'form';
+window.STRUCT_UPLOAD_MODE = 'json';
 
 // Simpan container biar bisa render ulang setelah upload
 (function () {
