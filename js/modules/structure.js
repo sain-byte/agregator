@@ -1,68 +1,136 @@
+// HELPER FORMAT TANGGAL INDONESIA (Contoh: 1990-10-03 -> 03 Oktober 1990)
+function formatDateIndo(dateStr) {
+  if (!dateStr || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') return '-';
+  let cleanStr = String(dateStr).trim().split('T')[0].split(' ')[0];
+  let parts = cleanStr.split('-');
+  if (parts.length !== 3) parts = cleanStr.split('/');
+  
+  const months = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+  
+  if (parts.length === 3) {
+    if (parts[0].length === 4) { // YYYY-MM-DD
+      const y = parts[0];
+      const m = parseInt(parts[1], 10);
+      const d = parts[2].padStart(2, '0');
+      if (m >= 1 && m <= 12) return `${d} ${months[m - 1]} ${y}`;
+    } else if (parts[2].length === 4) { // DD-MM-YYYY
+      const d = parts[0].padStart(2, '0');
+      const m = parseInt(parts[1], 10);
+      const y = parts[2];
+      if (m >= 1 && m <= 12) return `${d} ${months[m - 1]} ${y}`;
+    }
+  }
+  return dateStr;
+}
+
+// WINDOW GLOBAL UNTUK UPLOAD FOTO
+window.currentUploadAgentId = null;
+
+window.Agents_uploadPhoto = function(agentId) {
+  window.currentUploadAgentId = agentId;
+  let input = document.getElementById('global-agent-photo-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'global-agent-photo-input';
+    input.accept = 'image/*';
+    input.style.display = 'none';
+    input.onchange = window.handlePhotoSelected;
+    document.body.appendChild(input);
+  }
+  input.click();
+};
+
+window.handlePhotoSelected = async function(event) {
+  const file = event.target.files[0];
+  const agentId = window.currentUploadAgentId;
+  if (!file || !agentId) return;
+
+  const statusMsg = document.getElementById('upload-status-msg');
+  if (statusMsg) {
+    statusMsg.className = "text-xs p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20";
+    statusMsg.innerText = "Mengunggah foto baru...";
+    statusMsg.classList.remove('hidden');
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Data = e.target.result;
+    try {
+      const res = await fetch(CONFIG.API_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'uploadPhoto',
+          agent_id: agentId,
+          image: base64Data
+        })
+      });
+
+      const data = await res.json();
+      if (data && (data.status === 'success' || data.photo_url)) {
+        if (statusMsg) {
+          statusMsg.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+          statusMsg.innerText = "✅ Foto berhasil diperbarui!";
+        }
+        const img = document.getElementById('modal-agent-img');
+        if (img) img.src = data.photo_url || base64Data;
+        
+        const contentArea = document.getElementById('app-content');
+        if (contentArea) StructureModule.render(contentArea);
+      } else {
+        throw new Error((data && data.message) || 'Gagal mengunggah foto');
+      }
+    } catch (err) {
+      if (statusMsg) {
+        statusMsg.className = "text-xs p-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
+        statusMsg.innerText = "❌ Error: " + err.message;
+      }
+    }
+  };
+  reader.readAsDataURL(file);
+};
+
 const StructureModule = {
-  cache: {},
-  selectedId: null,
+  rawList: [],
 
   async render(container) {
     container.innerHTML = `
       <div class="flex flex-col items-center justify-center h-48 gap-3 text-slate-500">
         <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-brand-500"></i>
-        <p class="text-xs">Memuat Data Struktur Tim...</p>
+        <p class="text-xs">Memuat Data Profil Tim...</p>
       </div>
     `;
     if (window.lucide) lucide.createIcons();
 
-    // Fallback otomatis mencoba action: getStructure -> getAgents -> getProfiles
-    const actions = ['getStructure', 'getAgents', 'getProfiles'];
-    let data = null;
-    let lastError = '';
+    try {
+      const res = await fetch(`${CONFIG.API_URL}?action=getStructure`);
+      const result = await res.json();
+      
+      let tls = [];
+      let agents = [];
 
-    for (const act of actions) {
-      try {
-        const res = await fetch(`${CONFIG.API_URL}?action=${act}`);
-        const result = await res.json();
+      if (result) {
+        const dataObj = result.data || result;
+        tls = dataObj.team_leaders || dataObj.teamLeaders || [];
+        agents = dataObj.agents || [];
         
-        if (result && result.status !== 'error') {
-          data = result;
-          break;
-        } else if (result && result.message) {
-          lastError = result.message;
+        if (Array.isArray(dataObj)) {
+          tls = dataObj.filter(x => (x.role && String(x.role).toUpperCase().includes('TL')) || x.is_tl);
+          agents = dataObj.filter(x => !((x.role && String(x.role).toUpperCase().includes('TL')) || x.is_tl));
         }
-      } catch (err) {
-        lastError = err.message;
       }
-    }
 
-    if (data) {
-      this.renderData(container, data);
-    } else {
-      container.innerHTML = `
-        <div class="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold">
-          ❌ Server Error: ${lastError || 'Action GET tidak valid di Apps Script backend.'}
-        </div>
-      `;
+      this.renderData(container, tls, agents);
+    } catch (err) {
+      container.innerHTML = `<div class="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold">Gagal memuat data: ${err.message}</div>`;
     }
   },
 
-  renderData(container, data) {
-    let tls = [];
-    let agents = [];
-
-    const payload = data.data || data.structure || data.result || data;
-
-    if (Array.isArray(payload)) {
-      tls = payload.filter(x => x && (x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
-      agents = payload.filter(x => x && !(x.is_tl || (x.role && String(x.role).toUpperCase().includes('LEADER')) || (x.role && String(x.role).toUpperCase() === 'TL')));
-    } else if (typeof payload === 'object' && payload !== null) {
-      tls = payload.team_leaders || payload.teamLeaders || payload.tls || [];
-      agents = payload.agents || payload.agent_list || payload.agentList || [];
-    }
-
-    this.cache = {};
-    [...tls, ...agents].forEach(item => {
-      if (!item) return;
-      const id = String(item.id || item.agent_id || item.agentId || item.nama || '').trim();
-      if (id) this.cache[id] = item;
-    });
+  renderData(container, tls, agents) {
+    this.rawList = [...tls, ...agents];
 
     container.innerHTML = `
       <div class="space-y-6">
@@ -72,7 +140,7 @@ const StructureModule = {
             Team Leader (${tls.length})
           </h3>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            ${tls.length > 0 ? tls.map(tl => this.createCardHtml(tl, true)).join('') : '<p class="text-xs text-slate-500 italic p-2">Tidak ada Team Leader</p>'}
+            ${tls.map(tl => this.createCardHtml(tl, true)).join('')}
           </div>
         </div>
 
@@ -82,12 +150,10 @@ const StructureModule = {
             Daftar Agent (${agents.length})
           </h3>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            ${agents.length > 0 ? agents.map(ag => this.createCardHtml(ag, false)).join('') : '<p class="text-xs text-slate-500 italic p-2">Tidak ada Agent</p>'}
+            ${agents.map(ag => this.createCardHtml(ag, false)).join('')}
           </div>
         </div>
       </div>
-
-      <input type="file" id="global-agent-photo-input" accept="image/*" class="hidden" onchange="StructureModule.handlePhotoSelected(event)">
     `;
 
     if (window.lucide) lucide.createIcons();
@@ -95,7 +161,7 @@ const StructureModule = {
 
   createCardHtml(person, isTL) {
     const id = String(person.id || person.agent_id || person.nama || '').trim();
-    const photoUrl = person.photo || person.foto || person.avatar || 'https://via.placeholder.com/150';
+    const photoUrl = person.photo || person.foto || 'https://via.placeholder.com/150';
     const roleBadge = isTL ? 'Team Leader' : 'Agent';
     const aggText = person.aggregator ? `Agregator ${person.aggregator}` : 'Agregator -';
 
@@ -121,16 +187,13 @@ const StructureModule = {
   },
 
   openModal(id) {
-    const key = String(id || '').trim();
-    const person = this.cache[key];
+    const person = this.rawList.find(x => String(x.id || x.agent_id || x.nama || '').trim() === id);
     if (!person) return;
 
-    this.selectedId = id;
-    const rawTgl = person.tgl_lahir || person.tanggal_lahir || person.tglLahir || '-';
-    const formattedTgl = this.formatDateIndo(rawTgl);
-    const photo = person.photo || person.foto || person.avatar || 'https://via.placeholder.com/150';
-    const roleStr = String(person.role || '').toUpperCase();
-    const isTL = person.is_tl || roleStr.includes('TL') || roleStr.includes('LEADER');
+    const rawTgl = person.tgl_lahir || person.tanggal_lahir || '-';
+    const formattedTgl = formatDateIndo(rawTgl);
+    const photo = person.photo || person.foto || 'https://via.placeholder.com/150';
+    const isTL = person.is_tl || (person.role && String(person.role).toUpperCase().includes('LEADER'));
     const role = isTL ? 'Team Leader' : 'Agent';
     const agg = person.aggregator ? `Agregator ${person.aggregator}` : 'Agregator -';
     const nama = person.nama || person.name || '-';
@@ -160,7 +223,7 @@ const StructureModule = {
           <div>
             <h3 class="text-base font-extrabold text-white">${nama}</h3>
             <p class="text-xs text-brand-400 font-medium">${role} — ${agg}</p>
-            <button onclick="StructureModule.triggerPhotoUpload('${id}')" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 text-xs font-semibold rounded-lg border border-brand-500/30 transition">
+            <button onclick="window.Agents_uploadPhoto('${id}')" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 text-xs font-semibold rounded-lg border border-brand-500/30 transition">
               <i data-lucide="camera" class="w-3.5 h-3.5"></i>
               <span>Ubah Foto</span>
             </button>
@@ -197,95 +260,5 @@ const StructureModule = {
 
     modal.classList.remove('hidden');
     if (window.lucide) lucide.createIcons();
-  },
-
-  triggerPhotoUpload(id) {
-    this.selectedId = id;
-    const input = document.getElementById('global-agent-photo-input');
-    if (input) input.click();
-  },
-
-  async handlePhotoSelected(event) {
-    const file = event.target.files[0];
-    const id = this.selectedId;
-    if (!file || !id) return;
-
-    const statusMsg = document.getElementById('upload-status-msg');
-    if (statusMsg) {
-      statusMsg.className = "text-xs p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20";
-      statusMsg.innerText = "Mengunggah foto baru...";
-      statusMsg.classList.remove('hidden');
-    }
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64Data = e.target.result;
-      try {
-        const res = await fetch(CONFIG.API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            action: 'uploadPhoto',
-            agent_id: id,
-            image: base64Data
-          })
-        });
-
-        const data = await res.json();
-        if (data && (data.status === 'success' || data.photo_url)) {
-          if (statusMsg) {
-            statusMsg.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-            statusMsg.innerText = "Foto berhasil diperbarui!";
-          }
-          const img = document.getElementById('modal-agent-img');
-          if (img) img.src = data.photo_url || base64Data;
-
-          const contentArea = document.getElementById('app-content');
-          if (contentArea) this.render(contentArea);
-        } else {
-          throw new Error((data && data.message) || 'Gagal menyimpan foto');
-        }
-      } catch (err) {
-        if (statusMsg) {
-          statusMsg.className = "text-xs p-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
-          statusMsg.innerText = "Error: " + err.message;
-        }
-      }
-    };
-    reader.readAsDataURL(file);
-  },
-
-  formatDateIndo(dateStr) {
-    if (!dateStr || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') return '-';
-    let cleanStr = String(dateStr).trim();
-    if (cleanStr.includes('T')) cleanStr = cleanStr.split('T')[0];
-    cleanStr = cleanStr.split(' ')[0];
-
-    const months = [
-      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-    ];
-
-    let parts = cleanStr.split('-');
-    if (parts.length !== 3) parts = cleanStr.split('/');
-
-    if (parts.length === 3) {
-      if (parts[0].length === 4) {
-        const year = parts[0];
-        const monthNum = parseInt(parts[1], 10);
-        const day = parts[2].padStart(2, '0');
-        if (monthNum >= 1 && monthNum <= 12) return `${day} ${months[monthNum - 1]} ${year}`;
-      } else if (parts[2].length === 4) {
-        const day = parts[0].padStart(2, '0');
-        const monthNum = parseInt(parts[1], 10);
-        const year = parts[2];
-        if (monthNum >= 1 && monthNum <= 12) return `${day} ${months[monthNum - 1]} ${year}`;
-      }
-    }
-    return dateStr;
   }
 };
-
-window.Agents_uploadPhoto = (id) => StructureModule.triggerPhotoUpload(id);
-window.openDetailModalById = (id) => StructureModule.openModal(id);
-window.openDetailModal = (id) => StructureModule.openModal(id);
