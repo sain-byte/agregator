@@ -125,7 +125,7 @@ const StructureModule = {
         <div class="relative group">
           <div id="modal-avatar-container">
             ${data.foto_url 
-              ? `<img src="${data.foto_url}" class="w-16 h-16 rounded-2xl object-cover border border-slate-600">`
+              ? `<img src="${data.foto_url}" class="w-full h-full object-cover">`
               : `<div class="w-16 h-16 rounded-2xl bg-slate-700 flex items-center justify-center font-bold text-slate-200 text-xl border border-slate-600">
                   ${avatarFallback}
                  </div>`
@@ -237,7 +237,7 @@ const StructureModule = {
 
             // Update Avatar di Modal secara instant
             document.getElementById("modal-avatar-container").innerHTML = `
-              <img src="${res.photoUrl}" class="w-16 h-16 rounded-2xl object-cover border border-slate-600">
+              <img src="${res.photoUrl}" class="w-full h-full object-cover">
             `;
             
             // Refresh halaman belakang
@@ -355,7 +355,7 @@ StructureModule.handlePhotoUpload = async function (event, agentId) {
     const newSrc = data.photo_url || base64Data;
     const holder = document.getElementById('modal-avatar-container');
     if (holder) {
-      holder.innerHTML = `<img src="${newSrc}" class="w-16 h-16 rounded-2xl object-cover border border-slate-600">`;
+      holder.innerHTML = `<img src="${newSrc}" class="w-full h-full object-cover">`;
     }
     setStatus('ok', 'Foto berhasil diperbarui!');
 
@@ -370,4 +370,233 @@ StructureModule.handlePhotoUpload = async function (event, agentId) {
     input.value = '';
     if (window.lucide) lucide.createIcons();
   }
+};
+
+// ===== PATCH PROFIL V2: foto 9:16, TL di tengah, modal baru =====
+// Lebar foto di kartu agent. Kalau kartu kepanjangan, ganti 'w-full' jadi 'w-28'
+window.PROFIL_FOTO_AGENT = 'w-full';
+
+StructureModule.esc = function (s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+};
+
+StructureModule.initials = function (nama) {
+  return nama ? String(nama).split(' ').map(function (n) { return n[0]; }).slice(0, 2).join('') : 'AG';
+};
+
+StructureModule.formatTgl = function (v) {
+  if (!v || v === '-') return '-';
+  const bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  const s = String(v).trim().substring(0, 10);
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const mi = parseInt(m[2], 10);
+    if (mi >= 1 && mi <= 12) return m[3] + ' ' + bulan[mi - 1] + ' ' + m[1];
+  }
+  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) {
+    const mi = parseInt(m[2], 10);
+    if (mi >= 1 && mi <= 12) return m[1].padStart(2, '0') + ' ' + bulan[mi - 1] + ' ' + m[3];
+  }
+  return String(v);
+};
+
+// Crop tengah 9:16 -> 540x960
+StructureModule.compressImage = function (file) {
+  const W = 540, H = 960, ratio = W / H;
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onerror = function () { reject(new Error('Gagal baca file')); };
+    reader.onload = function (e) {
+      const img = new Image();
+      img.onerror = function () { reject(new Error('File bukan gambar valid')); };
+      img.onload = function () {
+        let sw = img.width, sh = img.height, sx = 0, sy = 0;
+        if (sw / sh > ratio) {
+          const nw = sh * ratio;
+          sx = (sw - nw) / 2; sw = nw;
+        } else {
+          const nh = sw / ratio;
+          sy = (sh - nh) / 2; sh = nh;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+StructureModule.createCardHTML = function (item, isTL) {
+  const E = StructureModule;
+  const nama = item.nama_agent || '-';
+  const active = item.status === 'Active';
+  const encoded = encodeURIComponent(JSON.stringify(item)).replace(/'/g, '%27');
+  const foto = item.foto_url
+    ? `<img src="${E.esc(item.foto_url)}" loading="lazy" alt="" class="w-full h-full object-cover">`
+    : `<div class="w-full h-full flex items-center justify-center font-bold text-xl text-slate-200 bg-slate-700">${E.esc(E.initials(item.nama_agent))}</div>`;
+  const dot = `<span class="absolute bottom-1.5 right-1.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${active ? 'bg-emerald-500' : 'bg-slate-500'}"></span>`;
+
+  if (isTL) {
+    return `
+      <div onclick="StructureModule.openModal('${encoded}')"
+           class="w-full max-w-sm rounded-2xl border border-sky-400/60 bg-sky-500/10 hover:border-sky-300 transition cursor-pointer p-3 flex items-center gap-4 group"
+           style="box-shadow:0 0 24px rgba(56,189,248,0.15)">
+        <div class="relative shrink-0 w-24 rounded-xl overflow-hidden border border-sky-400/50" style="aspect-ratio:9/16">
+          ${foto}${dot}
+        </div>
+        <div class="flex-1 min-w-0">
+          <span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide bg-sky-500/20 text-sky-300 border border-sky-400/40">Team Leader</span>
+          <h4 class="font-bold text-base text-white truncate mt-2">${E.esc(nama)}</h4>
+          <p class="text-xs text-slate-300 truncate mt-0.5">${E.esc(item.vendor || 'Mitracomm')}</p>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div onclick="StructureModule.openModal('${encoded}')"
+         class="rounded-2xl border border-slate-800 bg-slate-800/40 hover:border-slate-700 transition cursor-pointer p-2.5 flex flex-col items-center gap-2.5 group">
+      <div class="relative ${window.PROFIL_FOTO_AGENT} rounded-xl overflow-hidden border border-slate-700" style="aspect-ratio:9/16">
+        ${foto}${dot}
+      </div>
+      <div class="w-full min-w-0 text-center">
+        <h4 class="font-bold text-sm text-white truncate group-hover:text-blue-400 transition">${E.esc(nama)}</h4>
+        <p class="text-xs text-slate-400 truncate mt-0.5">${E.esc(item.vendor || 'Mitracomm')}</p>
+      </div>
+    </div>`;
+};
+
+StructureModule.render = async function (container) {
+  const E = StructureModule;
+  if (container) E._container = container;
+  const agentsData = await E.fetchAgents();
+
+  if (agentsData.length === 0) {
+    container.innerHTML = `
+      <div class="p-8 text-center text-slate-400 border border-dashed border-slate-800 rounded-2xl">
+        Belum ada data Agent di Sheet atau data gagal dimuat.
+      </div>`;
+    return;
+  }
+
+  const isTL = function (v) {
+    const l = String(v || '').toUpperCase();
+    return l.includes('TL') || l.includes('LEADER');
+  };
+  const tls = agentsData.filter(function (a) { return isTL(a.level); });
+  const agents = agentsData.filter(function (a) { return !isTL(a.level); });
+
+  container.innerHTML = `
+    <div class="space-y-4">
+      <div>
+        <h3 class="text-xs font-bold tracking-wider text-sky-300 uppercase mb-4 flex items-center justify-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4"></i>
+          Team Leader (${tls.length})
+        </h3>
+        ${tls.length > 0
+          ? `<div class="flex flex-col items-center gap-3">${tls.map(function (t) { return E.createCardHTML(t, true); }).join('')}</div>`
+          : `<div class="p-4 bg-slate-800/40 border border-slate-800 rounded-xl text-xs text-slate-500 text-center">Belum ada data Team Leader yang terdaftar.</div>`}
+      </div>
+
+      ${tls.length > 0 && agents.length > 0
+        ? `<div class="flex justify-center"><div class="w-px h-10 bg-gradient-to-b from-sky-400/70 to-slate-700"></div></div>`
+        : ''}
+
+      <div>
+        <h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase mb-4 flex items-center justify-center gap-2">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          Daftar Agent (${agents.length})
+        </h3>
+        ${agents.length > 0
+          ? `<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">${agents.map(function (a) { return E.createCardHTML(a, false); }).join('')}</div>`
+          : `<div class="p-4 bg-slate-800/40 border border-slate-800 rounded-xl text-xs text-slate-500 text-center">Belum ada data Agent yang terdaftar.</div>`}
+      </div>
+
+      <div id="profile-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4"
+           onclick="if(event.target===this)StructureModule.closeModal()">
+        <div id="modal-content" class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto"></div>
+      </div>
+    </div>`;
+
+  if (window.lucide) lucide.createIcons();
+};
+
+StructureModule.closeModal = function () {
+  const m = document.getElementById('profile-modal');
+  if (m) m.classList.add('hidden');
+};
+
+StructureModule.openModal = function (encodedData) {
+  const E = StructureModule;
+  const data = JSON.parse(decodeURIComponent(encodedData));
+  const modal = document.getElementById('profile-modal');
+  const box = document.getElementById('modal-content');
+  if (!modal || !box) return;
+
+  const foto = data.foto_url
+    ? `<img src="${E.esc(data.foto_url)}" alt="" class="w-full h-full object-cover">`
+    : `<div class="w-full h-full flex items-center justify-center font-bold text-2xl text-slate-200 bg-slate-700">${E.esc(E.initials(data.nama_agent))}</div>`;
+
+  box.innerHTML = `
+    <button onclick="StructureModule.closeModal()" class="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700/50">
+      <i data-lucide="x" class="w-5 h-5"></i>
+    </button>
+
+    <div class="flex gap-4 border-b border-slate-700/60 pb-5">
+      <div id="modal-avatar-container" class="relative shrink-0 w-28 rounded-2xl overflow-hidden border border-slate-600 bg-slate-700" style="aspect-ratio:9/16">
+        ${foto}
+      </div>
+
+      <div class="flex-1 min-w-0 pr-6">
+        <h3 class="font-bold text-base text-white truncate">${E.esc(data.nama_agent || '-')}</h3>
+        <p class="text-xs text-blue-400 font-medium mt-0.5">${E.esc(data.level || '-')}</p>
+
+        <div class="mt-2">
+          <label for="input-avatar-file" id="btn-upload-label" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 text-[11px] font-semibold cursor-pointer transition">
+            <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+            Ubah Foto
+          </label>
+          <input type="file" id="input-avatar-file" accept="image/*" class="hidden" onchange="StructureModule.handlePhotoUpload(event, '${E.esc(data.agent_id)}')">
+        </div>
+
+        <div class="mt-3 bg-slate-900/50 p-3 rounded-xl border border-slate-700/40 text-xs max-h-24 overflow-y-auto">
+          <p class="text-slate-500 font-medium mb-1">Keterangan / Biodata</p>
+          <p class="text-slate-300 leading-relaxed">${E.esc(data.keterangan || 'Tidak ada keterangan tambahan.')}</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="upload-status-msg" class="text-xs p-2.5 rounded-xl hidden"></div>
+
+    <div class="grid grid-cols-2 gap-3 text-xs">
+      <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700/40">
+        <p class="text-slate-500 font-medium mb-1">Batch</p>
+        <p class="text-slate-200 font-semibold">${E.esc(data.batch || '-')}</p>
+      </div>
+      <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700/40">
+        <p class="text-slate-500 font-medium mb-1">Vendor</p>
+        <p class="text-slate-200 font-semibold">${E.esc(data.vendor || '-')}</p>
+      </div>
+      <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700/40">
+        <p class="text-slate-500 font-medium mb-1">Team Leader</p>
+        <p class="text-slate-200 font-semibold">${E.esc(data.team_leader || '-')}</p>
+      </div>
+      <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700/40">
+        <p class="text-slate-500 font-medium mb-1">Tanggal Lahir</p>
+        <p class="text-slate-200 font-semibold">${E.esc(E.formatTgl(data.ttl))}</p>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
 };
